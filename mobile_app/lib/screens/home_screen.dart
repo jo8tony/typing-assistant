@@ -354,8 +354,9 @@ class _HomeScreenState extends State<HomeScreen> {
       }
 
       final blocks = await ocrService.recognizeText(file);
-      debugPrint('OCR 识别完成，结果数量: ${blocks.length}');
+      debugPrint('OCR 识别完成，结果数量：${blocks.length}');
 
+      // ignore: use_build_context_synchronously
       if (dialogContext != null && dialogContext!.mounted) {
         Navigator.pop(dialogContext!);
       }
@@ -396,6 +397,7 @@ class _HomeScreenState extends State<HomeScreen> {
     } on PlatformException catch (e) {
       debugPrint('OCR 平台异常: ${e.code} - ${e.message}');
       debugPrint('详细信息: ${e.details}');
+      // ignore: use_build_context_synchronously
       if (dialogContext != null && dialogContext!.mounted) {
         Navigator.pop(dialogContext!);
       }
@@ -405,6 +407,7 @@ class _HomeScreenState extends State<HomeScreen> {
     } catch (e, stackTrace) {
       debugPrint('OCR 处理异常: $e');
       debugPrint('堆栈: $stackTrace');
+      // ignore: use_build_context_synchronously
       if (dialogContext != null && dialogContext!.mounted) {
         Navigator.pop(dialogContext!);
       }
@@ -681,6 +684,7 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
             ),
           ),
+          ],
           actions: [
             // 断开连接按钮（只在已连接时显示）
             Consumer<WebSocketService>(
