@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import '../services/ocr_service.dart';
 import '../utils/constants.dart';
 
-/// OCR 结果选择界面（支持词块拆分和滑动选择）
+/// OCR 结果选择界面（支持更细粒度拆分和滑动选择）
 class OcrScreen extends StatefulWidget {
   final List<OcrTextBlock> textBlocks;
   final Function(String) onSend;
@@ -23,101 +23,76 @@ class _OcrScreenState extends State<OcrScreen> {
   @override
   void initState() {
     super.initState();
-    _wordBlocks = _splitBlocksIntoWords(widget.textBlocks);
+    _wordBlocks = _splitBlocksIntoCharacters(widget.textBlocks);
   }
 
-  /// 将大块文本拆分成词块
-  List<OcrWordBlock> _splitBlocksIntoWords(List<OcrTextBlock> blocks) {
-    List<OcrWordBlock> words = [];
-    int wordIndex = 0;
+  /// 将大块文本拆分成更细的字符块
+  List<OcrWordBlock> _splitBlocksIntoCharacters(List<OcrTextBlock> blocks) {
+    List<OcrWordBlock> characters = [];
+    int charIndex = 0;
 
     for (int i = 0; i < blocks.length; i++) {
       final block = blocks[i];
-      // 按空格、标点符号等拆分，但保留中文词语
-      final text = block.text.trim();
+      final text = block.text;
+
       
-      // 简单的拆分逻辑：按空格和标点拆分
-      final RegExp splitPattern = RegExp(r'[\s,，.。！？!？;；:：、]+');
-      final parts = text.split(splitPattern).where((s) => s.isNotEmpty).toList();
-      
-      for (final part in parts) {
-        words.add(OcrWordBlock(
-          text: part,
+      for (int j = 0; j < text.length; j++) {
+        final char = text[j];
+        
+        if (char.trim().isEmpty) continue;
+        
+        characters.add(OcrWordBlock(
+          text: char,
           originalIndex: i,
-          wordIndex: wordIndex++,
-        ));
-      }
-      
-      // 如果没有拆分出任何部分，至少保留原文本
-      if (parts.isEmpty && text.isNotEmpty) {
-        words.add(OcrWordBlock(
-          text: text,
-          originalIndex: i,
-          wordIndex: wordIndex++,
+          charIndex: charIndex++,
         ));
       }
     }
 
-    return words;
+    return characters;
   }
 
   /// 获取选中的文字
   String _getSelectedText() {
-    final selectedWords = _wordBlocks.where((w) => w.isSelected).toList();
-    if (selectedWords.isEmpty) return '';
+    final selectedChars = _wordBlocks.where((w) => w.isSelected).toList();
+    if (selectedChars.isEmpty) return '';
     
-    // 按顺序组合选中的词块
-    selectedWords.sort((a, b) => a.wordIndex.compareTo(b.wordIndex));
+    selectedChars.sort((a, b) => a.charIndex.compareTo(b.charIndex));
     
-    // 智能组合：中文不加空格，英文加空格
     final buffer = StringBuffer();
-    String? lastText;
-    
-    for (final word in selectedWords) {
-      if (buffer.isEmpty) {
-        buffer.write(word.text);
-      } else {
-        // 判断是否需要添加空格
-        final needSpace = _needSpaceBetween(lastText!, word.text);
-        if (needSpace) {
-          buffer.write(' ');
-        }
-        buffer.write(word.text);
-      }
-      lastText = word.text;
+    for (final char in selectedChars) {
+      buffer.write(char.text);
     }
     
     return buffer.toString();
   }
 
-  /// 判断两个文本之间是否需要空格
-  bool _needSpaceBetween(String text1, String text2) {
-    if (text1.isEmpty || text2.isEmpty) return false;
-    
-    final lastChar = text1.codeUnitAt(text1.length - 1);
-    final firstChar = text2.codeUnitAt(0);
-    
-    // 中文字符范围
-    final isLastCharChinese = lastChar >= 0x4E00 && lastChar <= 0x9FFF;
-    final isFirstCharChinese = firstChar >= 0x4E00 && firstChar <= 0x9FFF;
-    
-    // 如果最后字符和首字符都是中文，不需要空格
-    if (isLastCharChinese && isFirstCharChinese) {
-      return false;
-    }
-    
-    // 其他情况添加空格
-    return true;
-  }
+  /// 处理触摸开始
+  int? _lastTouchedIndex;
+  bool? _lastTouchedState;
 
-  /// 处理触摸事件（点击）
-  void _handleTouch(int index) {
+  void _handleTouchStart(int index) {
+    _lastTouchedIndex = index;
+    _lastTouchedState = !_wordBlocks[index].isSelected;
     setState(() {
-      _wordBlocks[index].isSelected = !_wordBlocks[index].isSelected;
+      _wordBlocks[index].isSelected = _lastTouchedState!;
     });
   }
 
-  /// 填充选中的文字到输入框
+  void _handleTouchUpdate(int index) {
+    if (index == _lastTouchedIndex) return;
+    
+    _lastTouchedIndex = index;
+    setState(() {
+      _wordBlocks[index].isSelected = _lastTouchedState!;
+    });
+  }
+
+  void _handleTouchEnd() {
+    _lastTouchedIndex = null;
+    _lastTouchedState = null;
+  }
+
   void _fillSelectedText() {
     final selectedText = _getSelectedText();
     if (selectedText.isEmpty) {
@@ -125,16 +100,13 @@ class _OcrScreenState extends State<OcrScreen> {
       return;
     }
 
-    // 将选中的文字填充到输入框
     widget.onSend(selectedText);
     
-    // 关闭 OCR 界面
     if (mounted) {
       Navigator.pop(context);
     }
   }
 
-  /// 显示提示
   void _showSnackBar(String message) {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
@@ -179,7 +151,6 @@ class _OcrScreenState extends State<OcrScreen> {
       ),
       body: Column(
         children: [
-          // 已选择数量
           if (selectedCount > 0)
             Container(
               padding: const EdgeInsets.symmetric(
@@ -192,7 +163,7 @@ class _OcrScreenState extends State<OcrScreen> {
                   Icon(Icons.check_circle, color: Colors.blue[700]),
                   const SizedBox(width: 8),
                   Text(
-                    '已选择 $selectedCount 个词',
+                    '已选择 $selectedCount 个字符',
                     style: TextStyle(
                       fontSize: Constants.fontSizeNormal,
                       color: Colors.blue[700],
@@ -203,55 +174,38 @@ class _OcrScreenState extends State<OcrScreen> {
               ),
             ),
 
-          // 词块网格
           Expanded(
-            child: GridView.builder(
-              padding: const EdgeInsets.all(Constants.paddingNormal),
-              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                crossAxisCount: 4,
-                crossAxisSpacing: 6,
-                mainAxisSpacing: 6,
-                childAspectRatio: 2.0,
-              ),
-              itemCount: _wordBlocks.length,
-              itemBuilder: (context, index) {
-                final word = _wordBlocks[index];
-                return GestureDetector(
-                  onTap: () => _handleTouch(index),
-                  child: Container(
-                    decoration: BoxDecoration(
-                      color: word.isSelected ? Colors.blue : Colors.grey[200],
-                      borderRadius: BorderRadius.circular(16),
-                      border: Border.all(
-                        color: word.isSelected ? Colors.blue : Colors.grey[300]!,
-                        width: 1.5,
-                      ),
-                    ),
-                    child: Center(
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
-                        child: Text(
-                          word.text,
-                          style: TextStyle(
-                            fontSize: word.text.length > 6 
-                                ? Constants.fontSizeSmall 
-                                : Constants.fontSizeNormal,
-                            color: word.isSelected ? Colors.white : Colors.black87,
-                            fontWeight: word.isSelected ? FontWeight.bold : FontWeight.normal,
-                          ),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          textAlign: TextAlign.center,
-                        ),
-                      ),
-                    ),
-                  ),
-                );
+            child: GestureDetector(
+              onPanStart: (details) {
+                _handleTouchEnd();
+                final index = _findWordBlockIndex(details.localPosition);
+                if (index != null) {
+                  _handleTouchStart(index);
+                }
               },
+              onPanUpdate: (details) {
+                final index = _findWordBlockIndex(details.localPosition);
+                if (index != null) {
+                  _handleTouchUpdate(index);
+                }
+              },
+              onPanEnd: (_) => _handleTouchEnd(),
+              child: Container(
+                color: Colors.grey[100],
+                child: SingleChildScrollView(
+                  padding: const EdgeInsets.all(Constants.paddingNormal),
+                  child: Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: _wordBlocks.map((word) {
+                      return _buildWordChip(word);
+                    }).toList(),
+                  ),
+                ),
+              ),
             ),
           ),
 
-          // 底部按钮
           Container(
             padding: const EdgeInsets.all(Constants.paddingNormal),
             decoration: BoxDecoration(
@@ -267,7 +221,6 @@ class _OcrScreenState extends State<OcrScreen> {
             child: SafeArea(
               child: Row(
                 children: [
-                  // 重拍按钮
                   Expanded(
                     child: SizedBox(
                       height: Constants.buttonHeight,
@@ -291,7 +244,6 @@ class _OcrScreenState extends State<OcrScreen> {
 
                   const SizedBox(width: Constants.paddingNormal),
 
-                  // 确认按钮
                   Expanded(
                     child: SizedBox(
                       height: Constants.buttonHeight,
@@ -319,6 +271,82 @@ class _OcrScreenState extends State<OcrScreen> {
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  int? _findWordBlockIndex(Offset position) {
+    final padding = Constants.paddingNormal;
+    
+    double currentX = padding;
+    double currentY = padding;
+    const maxWidth = 400.0;
+    const itemSpacing = 8.0;
+    const lineSpacing = 8.0;
+    const itemHeight = 40.0;
+    
+    for (int i = 0; i < _wordBlocks.length; i++) {
+      final word = _wordBlocks[i];
+      final textWidth = _calculateTextWidth(word.text);
+      final itemWidth = textWidth + 24;
+      
+      if (currentX + itemWidth > maxWidth) {
+        currentX = padding;
+        currentY += itemHeight + lineSpacing;
+      }
+      
+      final itemRect = Rect.fromLTWH(
+        currentX,
+        currentY,
+        itemWidth,
+        itemHeight,
+      );
+      
+      if (itemRect.contains(position)) {
+        return i;
+      }
+      
+      currentX += itemWidth + itemSpacing;
+    }
+    
+    return null;
+  }
+
+  double _calculateTextWidth(String text) {
+    return text.length * 16.0;
+  }
+
+  Widget _buildWordChip(OcrWordBlock word) {
+    final textWidth = _calculateTextWidth(word.text);
+    
+    return Container(
+      width: textWidth + 24,
+      height: 40,
+      decoration: BoxDecoration(
+        color: word.isSelected ? Colors.blue : Colors.white,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(
+          color: word.isSelected ? Colors.blue : Colors.grey[300]!,
+          width: 1.5,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.05),
+            blurRadius: 2,
+            offset: const Offset(0, 1),
+          ),
+        ],
+      ),
+      child: Center(
+        child: Text(
+          word.text,
+          style: TextStyle(
+            fontSize: Constants.fontSizeNormal,
+            color: word.isSelected ? Colors.white : Colors.black87,
+            fontWeight: word.isSelected ? FontWeight.bold : FontWeight.normal,
+          ),
+          textAlign: TextAlign.center,
+        ),
       ),
     );
   }

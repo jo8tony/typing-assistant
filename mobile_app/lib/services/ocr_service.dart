@@ -19,13 +19,13 @@ class OcrTextBlock {
 class OcrWordBlock {
   final String text;
   final int originalIndex;
-  final int wordIndex;
+  final int charIndex;
   bool isSelected;
 
   OcrWordBlock({
     required this.text,
     required this.originalIndex,
-    required this.wordIndex,
+    required this.charIndex,
     this.isSelected = false,
   });
 }
