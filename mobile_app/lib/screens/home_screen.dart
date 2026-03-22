@@ -1,8 +1,10 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:provider/provider.dart';
+import 'package:device_info_plus/device_info_plus.dart';
 import '../services/websocket_service.dart';
 import '../services/discovery_service.dart';
 import '../services/ocr_service.dart';
@@ -92,23 +94,101 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
+  /// 检查并请求存储权限
+  Future<bool> _requestStoragePermission() async {
+    final deviceInfo = DeviceInfoPlugin();
+    final androidInfo = await deviceInfo.androidInfo;
+    
+    if (androidInfo.version.sdkInt >= 33) {
+      final status = await Permission.photos.request();
+      if (status.isGranted) {
+        return true;
+      }
+      if (status.isPermanentlyDenied) {
+        _showPermissionSettingsDialog('照片权限');
+        return false;
+      }
+      return false;
+    } else if (androidInfo.version.sdkInt >= 30) {
+      final status = await Permission.manageExternalStorage.request();
+      if (status.isGranted) {
+        return true;
+      }
+      if (status.isPermanentlyDenied) {
+        _showPermissionSettingsDialog('存储权限');
+        return false;
+      }
+      return false;
+    } else {
+      final status = await Permission.storage.request();
+      if (status.isGranted) {
+        return true;
+      }
+      if (status.isPermanentlyDenied) {
+        _showPermissionSettingsDialog('存储权限');
+        return false;
+      }
+      return false;
+    }
+  }
+
+  /// 显示权限设置对话框
+  void _showPermissionSettingsDialog(String permissionName) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('$permissionName被拒绝'),
+        content: Text('请在设置中开启$permissionName，以便应用正常工作'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('取消'),
+          ),
+          TextButton(
+            onPressed: () {
+              Navigator.pop(context);
+              openAppSettings();
+            },
+            child: const Text('去设置'),
+          ),
+        ],
+      ),
+    );
+  }
+
   /// 拍照识别
   Future<void> _takePhoto() async {
     try {
-      final status = await Permission.camera.request();
-      if (!status.isGranted) {
-        _showSnackBar('需要相机权限才能拍照');
+      final cameraStatus = await Permission.camera.request();
+      if (!cameraStatus.isGranted) {
+        if (cameraStatus.isPermanentlyDenied) {
+          _showPermissionSettingsDialog('相机权限');
+        } else {
+          _showSnackBar('需要相机权限才能拍照');
+        }
+        return;
+      }
+
+      final storageGranted = await _requestStoragePermission();
+      if (!storageGranted) {
+        _showSnackBar('需要存储权限才能保存照片');
         return;
       }
 
       final XFile? photo = await _imagePicker.pickImage(
         source: ImageSource.camera,
         preferredCameraDevice: CameraDevice.rear,
+        imageQuality: 85,
+        maxWidth: 1920,
+        maxHeight: 1920,
       );
 
       if (photo != null) {
         await _processImage(photo.path);
       }
+    } on PlatformException catch (e) {
+      print('拍照平台异常: ${e.code} - ${e.message}');
+      _showSnackBar('拍照失败: ${e.message ?? e.code}');
     } catch (e, stackTrace) {
       print('拍照异常: $e');
       print('堆栈: $stackTrace');
@@ -119,13 +199,25 @@ class _HomeScreenState extends State<HomeScreen> {
   /// 从相册选择
   Future<void> _pickFromGallery() async {
     try {
+      final storageGranted = await _requestStoragePermission();
+      if (!storageGranted) {
+        _showSnackBar('需要存储权限才能选择图片');
+        return;
+      }
+
       final XFile? image = await _imagePicker.pickImage(
         source: ImageSource.gallery,
+        imageQuality: 85,
+        maxWidth: 1920,
+        maxHeight: 1920,
       );
 
       if (image != null) {
         await _processImage(image.path);
       }
+    } on PlatformException catch (e) {
+      print('选择图片平台异常: ${e.code} - ${e.message}');
+      _showSnackBar('选择图片失败: ${e.message ?? e.code}');
     } catch (e, stackTrace) {
       print('选择图片异常: $e');
       print('堆栈: $stackTrace');
@@ -152,8 +244,20 @@ class _HomeScreenState extends State<HomeScreen> {
     try {
       print('开始 OCR 识别: $imagePath');
       final file = File(imagePath);
-      print('文件存在: ${await file.exists()}');
-      print('文件大小: ${await file.length()}');
+      
+      final exists = await file.exists();
+      print('文件存在: $exists');
+      
+      if (!exists) {
+        throw Exception('图片文件不存在: $imagePath');
+      }
+      
+      final fileSize = await file.length();
+      print('文件大小: $fileSize bytes');
+      
+      if (fileSize == 0) {
+        throw Exception('图片文件为空');
+      }
 
       final blocks = await _ocrService.recognizeText(file);
       print('OCR 识别完成，结果数量: ${blocks.length}');
@@ -162,7 +266,7 @@ class _HomeScreenState extends State<HomeScreen> {
       Navigator.pop(context);
 
       if (blocks.isEmpty) {
-        _showSnackBar('未识别到文字');
+        _showSnackBar('未识别到文字，请确保图片中有清晰的文字');
         return;
       }
 
@@ -193,6 +297,13 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
         ),
       );
+    } on PlatformException catch (e) {
+      print('OCR 平台异常: ${e.code} - ${e.message}');
+      print('详细信息: ${e.details}');
+      if (mounted) {
+        Navigator.pop(context);
+        _showSnackBar('识别失败: ${e.message ?? e.code}');
+      }
     } catch (e, stackTrace) {
       print('OCR 处理异常: $e');
       print('堆栈: $stackTrace');
