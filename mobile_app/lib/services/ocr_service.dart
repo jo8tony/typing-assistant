@@ -22,14 +22,23 @@ class OcrService {
   TextRecognizer get textRecognizer {
     if (_textRecognizer == null) {
       try {
-        _textRecognizer = TextRecognizer();
+        debugPrint('初始化中文 OCR 识别器');
+        _textRecognizer = TextRecognizer(script: TextRecognitionScript.chinese);
+        debugPrint('中文 OCR 识别器初始化成功');
       } catch (e) {
-        debugPrint('创建默认 TextRecognizer 失败: $e');
+        debugPrint('创建中文 TextRecognizer 失败: $e');
         try {
+          debugPrint('尝试使用 Latin 脚本作为备用');
           _textRecognizer = TextRecognizer(script: TextRecognitionScript.latin);
         } catch (e2) {
           debugPrint('创建 Latin TextRecognizer 也失败: $e2');
-          rethrow;
+          try {
+            debugPrint('尝试使用默认构造函数');
+            _textRecognizer = TextRecognizer();
+          } catch (e3) {
+            debugPrint('所有初始化方式都失败: $e3');
+            rethrow;
+          }
         }
       }
     }
@@ -43,12 +52,16 @@ class OcrService {
     }
 
     try {
+      debugPrint('开始 OCR 识别，图片路径: ${imageFile.path}');
+      
       final exists = await imageFile.exists();
+      debugPrint('图片文件存在: $exists');
       if (!exists) {
         throw Exception('图片文件不存在: ${imageFile.path}');
       }
 
       final fileSize = await imageFile.length();
+      debugPrint('图片文件大小: $fileSize bytes');
       if (fileSize == 0) {
         throw Exception('图片文件为空');
       }
@@ -57,13 +70,20 @@ class OcrService {
         throw Exception('图片文件过大，请选择较小的图片');
       }
 
+      debugPrint('准备 InputImage');
       final inputImage = InputImage.fromFile(imageFile);
       
+      debugPrint('开始 processImage');
       final recognizedText = await textRecognizer.processImage(inputImage);
+      debugPrint('processImage 完成');
 
       if (_isDisposed) {
+        debugPrint('OcrService 已被释放');
         return [];
       }
+
+      debugPrint('原始识别结果 - 完整文本: ${recognizedText.text}');
+      debugPrint('原始识别结果 - 文字块数量: ${recognizedText.blocks.length}');
 
       List<OcrTextBlock> blocks = [];
       int index = 0;
@@ -75,6 +95,7 @@ class OcrService {
 
       for (TextBlock block in recognizedText.blocks) {
         final text = block.text.trim();
+        debugPrint('文字块 $index: $text');
         if (text.isNotEmpty) {
           blocks.add(OcrTextBlock(
             text: text,
@@ -83,13 +104,13 @@ class OcrService {
         }
       }
 
-      debugPrint('识别到 ${blocks.length} 个文字块');
+      debugPrint('最终识别到 ${blocks.length} 个有效文字块');
       return blocks;
     } on PlatformException catch (e) {
       debugPrint('OCR 平台异常: ${e.code} - ${e.message}');
       debugPrint('详细信息: ${e.details}');
       if (e.code == 'modelNotFound') {
-        throw Exception('OCR模型未找到，请确保网络连接正常');
+        throw Exception('OCR模型未找到，请确保网络连接正常以首次下载模型');
       }
       throw Exception('OCR识别失败: ${e.message ?? e.code}');
     } catch (e, stackTrace) {
