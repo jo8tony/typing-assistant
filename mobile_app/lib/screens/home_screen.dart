@@ -166,8 +166,10 @@ class _HomeScreenState extends State<HomeScreen> {
       await wsService.sendText(text);
       
       // 保存到历史记录
-      final historyService = context.read<TextHistoryService>();
-      historyService.addHistory(text);
+      if (mounted) {
+        final historyService = context.read<TextHistoryService>();
+        historyService.addHistory(text);
+      }
       
       _textController.clear();
       _showSnackBar('发送成功！', isError: false);
@@ -271,11 +273,11 @@ class _HomeScreenState extends State<HomeScreen> {
         await _processImage(photo.path);
       }
     } on PlatformException catch (e) {
-      print('拍照平台异常: ${e.code} - ${e.message}');
+      debugPrint('拍照平台异常: ${e.code} - ${e.message}');
       _showSnackBar('拍照失败: ${e.message ?? e.code}');
     } catch (e, stackTrace) {
-      print('拍照异常: $e');
-      print('堆栈: $stackTrace');
+      debugPrint('拍照异常: $e');
+      debugPrint('堆栈: $stackTrace');
       _showSnackBar('拍照失败: $e');
     }
   }
@@ -300,11 +302,11 @@ class _HomeScreenState extends State<HomeScreen> {
         await _processImage(image.path);
       }
     } on PlatformException catch (e) {
-      print('选择图片平台异常: ${e.code} - ${e.message}');
+      debugPrint('选择图片平台异常: ${e.code} - ${e.message}');
       _showSnackBar('选择图片失败: ${e.message ?? e.code}');
     } catch (e, stackTrace) {
-      print('选择图片异常: $e');
-      print('堆栈: $stackTrace');
+      debugPrint('选择图片异常: $e');
+      debugPrint('堆栈: $stackTrace');
       _showSnackBar('选择图片失败: $e');
     }
   }
@@ -449,11 +451,12 @@ class _HomeScreenState extends State<HomeScreen> {
         builder: (context, setDialogState) => AlertDialog(
           title: Row(
             children: [
-              const Text(
-                '连接设置',
-                style: TextStyle(fontSize: Constants.fontSizeLarge),
+              Expanded(
+                child: const Text(
+                  '连接设置',
+                  style: TextStyle(fontSize: Constants.fontSizeLarge),
+                ),
               ),
-              const Spacer(),
               // 关闭按钮
               IconButton(
                 icon: const Icon(Icons.close, size: 24),
@@ -463,9 +466,9 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
             ],
           ),
-          content: SingleChildScrollView(
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 400),
+          content: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 400),
+            child: SingleChildScrollView(
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -675,7 +678,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     ],
                   ),
                 ],
-              ],
+              ),
             ),
           ),
           actions: [

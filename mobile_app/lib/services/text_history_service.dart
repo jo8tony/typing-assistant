@@ -90,8 +90,4 @@ class TextHistoryService extends ChangeNotifier {
     return _history.sublist(0, count);
   }
 
-  @override
-  void dispose() {
-    super.dispose();
-  }
 }

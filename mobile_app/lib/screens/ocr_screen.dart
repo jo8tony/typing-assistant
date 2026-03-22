@@ -20,7 +20,6 @@ class OcrScreen extends StatefulWidget {
 class _OcrScreenState extends State<OcrScreen> {
   late List<OcrWordBlock> _wordBlocks;
   bool _isSending = false;
-  bool _isSelectionMode = false;
   int? _lastTouchedIndex;
 
   @override

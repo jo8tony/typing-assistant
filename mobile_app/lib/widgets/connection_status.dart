@@ -6,9 +6,9 @@ class ConnectionStatusWidget extends StatelessWidget {
   final ConnectionModel connectionModel;
 
   const ConnectionStatusWidget({
-    Key? key,
+    super.key,
     required this.connectionModel,
-  }) : super(key: key);
+  });
 
   @override
   Widget build(BuildContext context) {
