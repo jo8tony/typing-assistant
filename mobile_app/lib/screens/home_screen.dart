@@ -454,8 +454,8 @@ class _HomeScreenState extends State<HomeScreen> {
         builder: (context, setDialogState) => AlertDialog(
           title: Row(
             children: [
-              Expanded(
-                child: const Text(
+              const Expanded(
+                child: Text(
                   '连接设置',
                   style: TextStyle(fontSize: Constants.fontSizeLarge),
                 ),
@@ -681,10 +681,10 @@ class _HomeScreenState extends State<HomeScreen> {
                     ],
                   ),
                 ],
+                ],
               ),
             ),
           ),
-          ],
           actions: [
             // 断开连接按钮（只在已连接时显示）
             Consumer<WebSocketService>(

@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'package:flutter/foundation.dart';
 import 'package:multicast_dns/multicast_dns.dart';
 import '../utils/constants.dart';
 
@@ -102,7 +103,7 @@ class DiscoveryService {
         }
       }
     } catch (e) {
-      print('mDNS 搜索出错: $e');
+      debugPrint('mDNS 搜索出错：$e');
     }
   }
 

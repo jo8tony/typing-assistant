@@ -44,7 +44,7 @@ class WebSocketService extends ChangeNotifier {
       final savedPort = prefs.getInt('last_connected_port') ?? Constants.websocketPort;
 
       if (savedIp != null && savedIp.isNotEmpty) {
-        print('发现保存的 IP: $savedIp:$savedPort');
+        debugPrint('发现保存的 IP: $savedIp:$savedPort');
         // 自动尝试连接（但不强制重连）
         final computer = DiscoveredComputer(
           name: '历史连接',
@@ -58,7 +58,7 @@ class WebSocketService extends ChangeNotifier {
         });
       }
     } catch (e) {
-      print('加载保存的连接信息失败: $e');
+      debugPrint('加载保存的连接信息失败：$e');
     }
   }
 
@@ -68,9 +68,9 @@ class WebSocketService extends ChangeNotifier {
       final prefs = await SharedPreferences.getInstance();
       await prefs.setString('last_connected_ip', ip);
       await prefs.setInt('last_connected_port', port);
-      print('已保存连接信息: $ip:$port');
+      debugPrint('已保存连接信息：$ip:$port');
     } catch (e) {
-      print('保存连接信息失败: $e');
+      debugPrint('保存连接信息失败：$e');
     }
   }
 
@@ -81,7 +81,7 @@ class WebSocketService extends ChangeNotifier {
       await prefs.remove('last_connected_ip');
       await prefs.remove('last_connected_port');
     } catch (e) {
-      print('清除连接信息失败: $e');
+      debugPrint('清除连接信息失败：$e');
     }
   }
 
@@ -89,14 +89,14 @@ class WebSocketService extends ChangeNotifier {
   Future<bool> connect(DiscoveredComputer computer, {bool autoReconnect = true}) async {
     // 防止重复连接
     if (_isConnecting) {
-      print('正在连接中，忽略重复请求');
+      debugPrint('正在连接中，忽略重复请求');
       return false;
     }
 
     // 如果已经连接到同一个 IP 地址，直接返回成功（只比较 IP，不比较 name）
     if (_connectionModel.isConnected &&
         _connectionModel.computerIp == computer.ip) {
-      print('已经连接到 $computer.ip，无需重复连接');
+      debugPrint('已经连接到 $computer.ip，无需重复连接');
       return true;
     }
 
@@ -107,7 +107,7 @@ class WebSocketService extends ChangeNotifier {
     _shouldReconnect = autoReconnect;
 
     final wsUrl = 'ws://${computer.ip}:${computer.port}';
-    print('正在连接到: $wsUrl');
+    debugPrint('正在连接到：$wsUrl');
 
     try {
       _channel = IOWebSocketChannel.connect(
@@ -142,11 +142,11 @@ class WebSocketService extends ChangeNotifier {
       // 取消重连定时器
       _reconnectTimer?.cancel();
 
-      print('连接成功: $wsUrl');
+      debugPrint('连接成功：$wsUrl');
       _isConnecting = false;
       return true;
     } on TimeoutException catch (e) {
-      print('连接超时: $e');
+      debugPrint('连接超时：$e');
       _connectionModel.setError('连接超时，请检查:\n1. IP 地址是否正确\n2. 电脑端服务是否已启动\n3. 手机和电脑是否在同一网络');
       _isConnecting = false;
       if (autoReconnect) {
@@ -154,7 +154,7 @@ class WebSocketService extends ChangeNotifier {
       }
       return false;
     } catch (e) {
-      print('连接失败: $e');
+      debugPrint('连接失败: $e');
       _connectionModel.setError('连接失败: $e');
       _isConnecting = false;
       if (autoReconnect) {
@@ -179,12 +179,12 @@ class WebSocketService extends ChangeNotifier {
   Future<bool> testConnection(String ip, int port) async {
     // 如果已经连接到同一个 IP，直接返回成功
     if (_connectionModel.isConnected && _connectionModel.computerIp == ip) {
-      print('已经连接到 $ip，测试通过');
+      debugPrint('已经连接到 $ip，测试通过');
       return true;
     }
 
     final wsUrl = 'ws://$ip:$port';
-    print('测试连接到: $wsUrl');
+    debugPrint('测试连接到：$wsUrl');
 
     WebSocketChannel? testChannel;
     try {
@@ -227,20 +227,20 @@ class WebSocketService extends ChangeNotifier {
       await testChannel.sink.close();
 
       if (response != null) {
-        print('连接测试成功');
+        debugPrint('连接测试成功');
         return true;
       } else {
-        print('连接测试失败：未收到响应');
+        debugPrint('连接测试失败：未收到响应');
         _connectionModel.setError('连接测试失败：服务器无响应');
         return false;
       }
     } on TimeoutException catch (e) {
-      print('连接测试超时: $e');
+debugPrint('连接测试超时: $e');
       _connectionModel.setError('连接超时，请检查:\n1. IP 地址是否正确\n2. 电脑端服务是否已启动');
       testChannel?.sink.close();
       return false;
     } catch (e) {
-      print('连接测试失败: $e');
+debugPrint('连接测试失败: $e');
       _connectionModel.setError('连接失败: $e');
       testChannel?.sink.close();
       return false;
@@ -257,7 +257,7 @@ class WebSocketService extends ChangeNotifier {
       try {
         await _channel!.sink.close();
       } catch (e) {
-        print('关闭连接时出错: $e');
+        debugPrint('关闭连接时出错: $e');
       }
       _channel = null;
     }
@@ -278,7 +278,7 @@ class WebSocketService extends ChangeNotifier {
     };
 
     _channel!.sink.add(jsonEncode(message));
-    print('发送文字: $text');
+debugPrint('发送文字: $text');
   }
 
   /// 发送 OCR 文字到电脑
@@ -294,7 +294,7 @@ class WebSocketService extends ChangeNotifier {
     };
 
     _channel!.sink.add(jsonEncode(message));
-    print('发送 OCR 文字: $text');
+debugPrint('发送 OCR 文字: $text');
   }
 
   /// 处理收到的消息
@@ -306,24 +306,24 @@ class WebSocketService extends ChangeNotifier {
       switch (type) {
         case 'pong':
           // 心跳响应
-          print('收到心跳响应');
+          debugPrint('收到心跳响应');
           break;
         case 'input_result':
           final success = data['success'] ?? false;
           final msg = data['message'] ?? '';
-          print('输入结果: $success, $msg');
+          debugPrint('输入结果: $success, $msg');
           break;
         default:
-          print('收到未知类型消息: $type');
+          debugPrint('收到未知类型消息: $type');
       }
     } catch (e) {
-      print('解析消息失败: $e');
+debugPrint('解析消息失败: $e');
     }
   }
 
   /// 处理错误
   void _onError(error) {
-    print('WebSocket 错误: $error');
+debugPrint('WebSocket 错误: $error');
     // 在连接中或已连接状态下都处理错误
     if (_connectionModel.isConnected || _connectionModel.isConnecting) {
       _connectionModel.setError('连接错误: $error');
@@ -332,7 +332,7 @@ class WebSocketService extends ChangeNotifier {
 
   /// 连接关闭
   void _onDone() {
-    print('WebSocket 连接已关闭');
+debugPrint('WebSocket 连接已关闭');
     // 在任何非断开状态下都设置为断开
     if (!_connectionModel.isDisconnected) {
       _connectionModel.setDisconnected();
@@ -362,7 +362,7 @@ class WebSocketService extends ChangeNotifier {
           };
           _channel!.sink.add(jsonEncode(message));
         } catch (e) {
-          print('发送心跳失败: $e');
+          debugPrint('发送心跳失败: $e');
         }
       }
     });
@@ -371,13 +371,13 @@ class WebSocketService extends ChangeNotifier {
   /// 安排重连
   void _scheduleReconnect(DiscoveredComputer computer) {
     _reconnectTimer?.cancel();
-    print('${_shouldReconnect ? "将" : "不"}在 ${Constants.reconnectInterval.inSeconds} 秒后重连');
+debugPrint('${_shouldReconnect ? "将" : "不"}在 ${Constants.reconnectInterval.inSeconds} 秒后重连');
 
     if (!_shouldReconnect) return;
 
     _reconnectTimer = Timer(Constants.reconnectInterval, () {
       if (_shouldReconnect) {
-        print('尝试重新连接...');
+        debugPrint('尝试重新连接...');
         connect(computer, autoReconnect: true);
       }
     });
