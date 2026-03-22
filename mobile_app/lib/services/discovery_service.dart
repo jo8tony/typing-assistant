@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 import 'package:multicast_dns/multicast_dns.dart';
 import '../utils/constants.dart';
@@ -79,7 +80,7 @@ class DiscoveryService {
             await for (final TxtResourceRecord txt in _client!.lookup<TxtResourceRecord>(
               ResourceRecordQuery.text(serviceName),
             )) {
-              final text = String.fromCharCodes(txt.text);
+              final text = utf8.decode(txt.text);
               if (text.contains('platform=')) {
                 platform = text.split('platform=')[1].split(',')[0];
               }
