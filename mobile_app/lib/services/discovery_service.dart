@@ -80,7 +80,8 @@ class DiscoveryService {
             await for (final TxtResourceRecord txt in _client!.lookup<TxtResourceRecord>(
               ResourceRecordQuery.text(serviceName),
             )) {
-              final text = utf8.decode(txt.text);
+              // txt.text 是 List<int> 类型，需要解码
+              final text = utf8.decode(txt.text as List<int>);
               if (text.contains('platform=')) {
                 platform = text.split('platform=')[1].split(',')[0];
               }
