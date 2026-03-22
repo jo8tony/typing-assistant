@@ -88,7 +88,7 @@ class TypingServer:
         except Exception as e:
             print(f"处理消息时出错: {e}")
     
-    async def client_handler(self, websocket: WebSocketServerProtocol, path: str):
+    async def client_handler(self, websocket: WebSocketServerProtocol):
         """客户端连接处理器"""
         await self.register(websocket)
         try:

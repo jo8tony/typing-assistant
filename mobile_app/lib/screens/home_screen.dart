@@ -252,128 +252,132 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
         ],
       ),
-      body: Padding(
-        padding: const EdgeInsets.all(Constants.paddingNormal),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            // 连接状态
-            Consumer<WebSocketService>(
-              builder: (context, wsService, child) {
-                return Center(
-                  child: ConnectionStatusWidget(
-                    connectionModel: wsService.connectionModel,
-                  ),
-                );
-              },
-            ),
-
-            const SizedBox(height: Constants.paddingLarge),
-
-            // 文字输入区域
-            Expanded(
-              child: Container(
-                decoration: BoxDecoration(
-                  border: Border.all(color: Colors.grey),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: TextField(
-                  controller: _textController,
-                  maxLines: null,
-                  expands: true,
-                  textAlignVertical: TextAlignVertical.top,
-                  style: const TextStyle(
-                    fontSize: Constants.fontSizeLarge,
-                  ),
-                  decoration: const InputDecoration(
-                    hintText: '点击此处手写或输入文字...',
-                    hintStyle: TextStyle(
-                      fontSize: Constants.fontSizeLarge,
-                      color: Colors.grey,
+      body: SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.all(Constants.paddingNormal),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              // 连接状态
+              Consumer<WebSocketService>(
+                builder: (context, wsService, child) {
+                  return Center(
+                    child: ConnectionStatusWidget(
+                      connectionModel: wsService.connectionModel,
                     ),
-                    contentPadding: EdgeInsets.all(Constants.paddingNormal),
-                    border: InputBorder.none,
-                  ),
-                ),
+                  );
+                },
               ),
-            ),
 
-            const SizedBox(height: Constants.paddingLarge),
+              const SizedBox(height: Constants.paddingNormal),
 
-            // 拍照识字按钮
-            SizedBox(
-              height: Constants.buttonHeightLarge,
-              child: ElevatedButton.icon(
-                onPressed: _takePhoto,
-                icon: const Icon(Icons.camera_alt, size: 32),
-                label: const Text(
-                  '📷 拍照识字',
-                  style: TextStyle(fontSize: Constants.fontSizeLarge),
-                ),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.blue,
-                  foregroundColor: Colors.white,
-                  shape: RoundedRectangleBorder(
+              // 文字输入区域 - 使用 Flexible 而不是 Expanded，避免键盘弹出时被压缩
+              Flexible(
+                flex: 3,
+                child: Container(
+                  decoration: BoxDecoration(
+                    border: Border.all(color: Colors.grey),
                     borderRadius: BorderRadius.circular(12),
                   ),
-                ),
-              ),
-            ),
-
-            const SizedBox(height: Constants.paddingNormal),
-
-            // 从相册选择按钮
-            SizedBox(
-              height: Constants.buttonHeight,
-              child: OutlinedButton.icon(
-                onPressed: _pickFromGallery,
-                icon: const Icon(Icons.photo_library, size: 24),
-                label: const Text(
-                  '从相册选择',
-                  style: TextStyle(fontSize: Constants.fontSizeNormal),
-                ),
-                style: OutlinedButton.styleFrom(
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
+                  child: TextField(
+                    controller: _textController,
+                    maxLines: null,
+                    expands: true,
+                    textAlignVertical: TextAlignVertical.top,
+                    style: const TextStyle(
+                      fontSize: Constants.fontSizeLarge,
+                    ),
+                    decoration: const InputDecoration(
+                      hintText: '点击此处手写或输入文字...',
+                      hintStyle: TextStyle(
+                        fontSize: Constants.fontSizeLarge,
+                        color: Colors.grey,
+                      ),
+                      contentPadding: EdgeInsets.all(Constants.paddingNormal),
+                      border: InputBorder.none,
+                    ),
                   ),
                 ),
               ),
-            ),
 
-            const SizedBox(height: Constants.paddingNormal),
+              const SizedBox(height: Constants.paddingNormal),
 
-            // 发送按钮
-            SizedBox(
-              height: Constants.buttonHeightLarge,
-              child: ElevatedButton.icon(
-                onPressed: _isSending ? null : _sendText,
-                icon: _isSending
-                    ? const SizedBox(
-                        width: 24,
-                        height: 24,
-                        child: CircularProgressIndicator(
-                          color: Colors.white,
-                          strokeWidth: 2,
+              // 三个按钮水平排列在一行
+              Row(
+                children: [
+                  // 拍照按钮
+                  Expanded(
+                    child: ElevatedButton.icon(
+                      onPressed: _takePhoto,
+                      icon: const Icon(Icons.camera_alt, size: 24),
+                      label: const Text(
+                        '拍照',
+                        style: TextStyle(fontSize: Constants.fontSizeNormal),
+                      ),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.blue,
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(8),
                         ),
-                      )
-                    : const Icon(Icons.send, size: 32),
-                label: Text(
-                  _isSending ? '发送中...' : '✉️ 发送文字',
-                  style: const TextStyle(fontSize: Constants.fontSizeLarge),
-                ),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.green,
-                  foregroundColor: Colors.white,
-                  disabledBackgroundColor: Colors.green.withOpacity(0.5),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
+                      ),
+                    ),
                   ),
-                ),
+                  const SizedBox(width: 8),
+                  // 相册按钮
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      onPressed: _pickFromGallery,
+                      icon: const Icon(Icons.photo_library, size: 24),
+                      label: const Text(
+                        '相册',
+                        style: TextStyle(fontSize: Constants.fontSizeNormal),
+                      ),
+                      style: OutlinedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  // 发送按钮
+                  Expanded(
+                    child: ElevatedButton.icon(
+                      onPressed: _isSending ? null : _sendText,
+                      icon: _isSending
+                          ? const SizedBox(
+                              width: 20,
+                              height: 20,
+                              child: CircularProgressIndicator(
+                                color: Colors.white,
+                                strokeWidth: 2,
+                              ),
+                            )
+                          : const Icon(Icons.send, size: 24),
+                      label: Text(
+                        _isSending ? '发送中' : '发送',
+                        style: const TextStyle(fontSize: Constants.fontSizeNormal),
+                      ),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.green,
+                        foregroundColor: Colors.white,
+                        disabledBackgroundColor: Colors.green.withOpacity(0.5),
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
               ),
-            ),
 
-            const SizedBox(height: Constants.paddingNormal),
-          ],
+              const SizedBox(height: Constants.paddingSmall),
+            ],
+          ),
         ),
       ),
     );
