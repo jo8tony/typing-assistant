@@ -48,14 +48,15 @@ jobs:
         name: typing-assistant-apk
         path: mobile_app/build/app/outputs/flutter-apk/app-release.apk
     
-    - name: Create Release
-      if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-      uses: softprops/action-gh-release@v1
-      with:
-        files: mobile_app/build/app/outputs/flutter-apk/app-release.apk
-        tag_name: v${{ github.run_number }}
-        name: Release v${{ github.run_number }}
-        draft: false
-        prerelease: false
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    # 暂时禁用自动 Release，因为权限问题
+    # - name: Create Release
+    #   if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    #   uses: softprops/action-gh-release@v1
+    #   with:
+    #     files: mobile_app/build/app/outputs/flutter-apk/app-release.apk
+    #     tag_name: v${{ github.run_number }}
+    #     name: Release v${{ github.run_number }}
+    #     draft: false
+    #     prerelease: false
+    #   env:
+    #     GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
