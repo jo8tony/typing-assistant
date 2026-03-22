@@ -132,6 +132,9 @@ class _HomeScreenState extends State<HomeScreen> {
 
   /// 处理图片进行 OCR
   Future<void> _processImage(String imagePath) async {
+    // 提前获取 WebSocketService，避免在回调中使用 context
+    final wsService = context.read<WebSocketService>();
+
     showDialog(
       context: context,
       barrierDismissible: false,
@@ -144,6 +147,7 @@ class _HomeScreenState extends State<HomeScreen> {
       final file = File(imagePath);
       final blocks = await _ocrService.recognizeText(file);
 
+      if (!mounted) return;
       Navigator.pop(context); // 关闭加载对话框
 
       if (blocks.isEmpty) {
@@ -151,14 +155,15 @@ class _HomeScreenState extends State<HomeScreen> {
         return;
       }
 
+      if (!mounted) return;
+
       // 跳转到 OCR 结果选择界面
-      Navigator.push(
+      await Navigator.push(
         context,
         MaterialPageRoute(
           builder: (context) => OcrScreen(
             textBlocks: blocks,
             onSend: (selectedText) async {
-              final wsService = context.read<WebSocketService>();
               if (!wsService.connectionModel.isConnected) {
                 _showSnackBar('未连接到电脑');
                 return;
@@ -166,17 +171,23 @@ class _HomeScreenState extends State<HomeScreen> {
 
               try {
                 await wsService.sendOcrText(selectedText);
-                _showSnackBar('发送成功！', isError: false);
+                if (mounted) {
+                  _showSnackBar('发送成功！', isError: false);
+                }
               } catch (e) {
-                _showSnackBar('发送失败: $e');
+                if (mounted) {
+                  _showSnackBar('发送失败: $e');
+                }
               }
             },
           ),
         ),
       );
     } catch (e) {
-      Navigator.pop(context);
-      _showSnackBar('识别失败: $e');
+      if (mounted) {
+        Navigator.pop(context);
+        _showSnackBar('识别失败: $e');
+      }
     }
   }
 
