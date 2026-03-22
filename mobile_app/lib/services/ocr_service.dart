@@ -22,23 +22,17 @@ class OcrService {
   TextRecognizer get textRecognizer {
     if (_textRecognizer == null) {
       try {
-        debugPrint('初始化中文 OCR 识别器');
-        _textRecognizer = TextRecognizer(script: TextRecognitionScript.chinese);
-        debugPrint('中文 OCR 识别器初始化成功');
+        debugPrint('初始化 OCR 识别器（默认模式，支持多语言）');
+        _textRecognizer = TextRecognizer();
+        debugPrint('OCR 识别器初始化成功');
       } catch (e) {
-        debugPrint('创建中文 TextRecognizer 失败: $e');
+        debugPrint('创建默认 TextRecognizer 失败: $e');
         try {
           debugPrint('尝试使用 Latin 脚本作为备用');
           _textRecognizer = TextRecognizer(script: TextRecognitionScript.latin);
         } catch (e2) {
           debugPrint('创建 Latin TextRecognizer 也失败: $e2');
-          try {
-            debugPrint('尝试使用默认构造函数');
-            _textRecognizer = TextRecognizer();
-          } catch (e3) {
-            debugPrint('所有初始化方式都失败: $e3');
-            rethrow;
-          }
+          rethrow;
         }
       }
     }
