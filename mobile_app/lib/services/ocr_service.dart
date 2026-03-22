@@ -20,13 +20,21 @@ class OcrService {
   bool _isDisposed = false;
 
   TextRecognizer get textRecognizer {
-    _textRecognizer ??= TextRecognizer(script: TextRecognitionScript.chinese);
+    if (_textRecognizer == null) {
+      try {
+        _textRecognizer = TextRecognizer(script: TextRecognitionScript.latin);
+      } catch (e) {
+        debugPrint('创建 TextRecognizer 失败: $e');
+        _textRecognizer = TextRecognizer();
+      }
+    }
     return _textRecognizer!;
   }
 
   Future<List<OcrTextBlock>> recognizeText(File imageFile) async {
     if (_isDisposed) {
-      throw Exception('OcrService has been disposed');
+      debugPrint('OcrService has been disposed');
+      return [];
     }
 
     try {
@@ -55,6 +63,11 @@ class OcrService {
       List<OcrTextBlock> blocks = [];
       int index = 0;
 
+      if (recognizedText.blocks.isEmpty) {
+        debugPrint('未识别到文字块');
+        return blocks;
+      }
+
       for (TextBlock block in recognizedText.blocks) {
         final text = block.text.trim();
         if (text.isNotEmpty) {
@@ -65,20 +78,31 @@ class OcrService {
         }
       }
 
+      debugPrint('识别到 ${blocks.length} 个文字块');
       return blocks;
     } on PlatformException catch (e) {
       debugPrint('OCR 平台异常: ${e.code} - ${e.message}');
       debugPrint('详细信息: ${e.details}');
+      if (e.code == 'modelNotFound') {
+        throw Exception('OCR模型未找到，请确保网络连接正常');
+      }
       throw Exception('OCR识别失败: ${e.message ?? e.code}');
-    } catch (e) {
+    } catch (e, stackTrace) {
       debugPrint('OCR 识别失败: $e');
+      debugPrint('堆栈: $stackTrace');
       rethrow;
     }
   }
 
   void dispose() {
     _isDisposed = true;
-    _textRecognizer?.close();
-    _textRecognizer = null;
+    if (_textRecognizer != null) {
+      try {
+        _textRecognizer!.close();
+      } catch (e) {
+        debugPrint('关闭 TextRecognizer 失败: $e');
+      }
+      _textRecognizer = null;
+    }
   }
 }

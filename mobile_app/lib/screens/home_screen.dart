@@ -231,18 +231,24 @@ class _HomeScreenState extends State<HomeScreen> {
 
     final wsService = context.read<WebSocketService>();
 
-    if (!mounted) return;
-
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (dialogContext) => const Center(
-        child: CircularProgressIndicator(),
-      ),
-    );
-
+    BuildContext? dialogContext;
+    
     try {
       print('开始 OCR 识别: $imagePath');
+      
+      if (!mounted) return;
+      
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (ctx) {
+          dialogContext = ctx;
+          return const Center(
+            child: CircularProgressIndicator(),
+          );
+        },
+      );
+
       final file = File(imagePath);
       
       final exists = await file.exists();
@@ -262,15 +268,16 @@ class _HomeScreenState extends State<HomeScreen> {
       final blocks = await _ocrService.recognizeText(file);
       print('OCR 识别完成，结果数量: ${blocks.length}');
 
+      if (dialogContext != null && dialogContext!.mounted) {
+        Navigator.pop(dialogContext!);
+      }
+
       if (!mounted) return;
-      Navigator.pop(context);
 
       if (blocks.isEmpty) {
         _showSnackBar('未识别到文字，请确保图片中有清晰的文字');
         return;
       }
-
-      if (!mounted) return;
 
       await Navigator.push(
         context,
@@ -279,7 +286,7 @@ class _HomeScreenState extends State<HomeScreen> {
             textBlocks: blocks,
             onSend: (selectedText) async {
               if (!wsService.connectionModel.isConnected) {
-                _showSnackBar('未连接到电脑');
+                if (mounted) _showSnackBar('未连接到电脑');
                 return;
               }
 
@@ -300,15 +307,19 @@ class _HomeScreenState extends State<HomeScreen> {
     } on PlatformException catch (e) {
       print('OCR 平台异常: ${e.code} - ${e.message}');
       print('详细信息: ${e.details}');
+      if (dialogContext != null && dialogContext!.mounted) {
+        Navigator.pop(dialogContext!);
+      }
       if (mounted) {
-        Navigator.pop(context);
         _showSnackBar('识别失败: ${e.message ?? e.code}');
       }
     } catch (e, stackTrace) {
       print('OCR 处理异常: $e');
       print('堆栈: $stackTrace');
+      if (dialogContext != null && dialogContext!.mounted) {
+        Navigator.pop(dialogContext!);
+      }
       if (mounted) {
-        Navigator.pop(context);
         _showSnackBar('识别失败: $e');
       }
     }
