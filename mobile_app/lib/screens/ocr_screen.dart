@@ -19,8 +19,6 @@ class OcrScreen extends StatefulWidget {
 
 class _OcrScreenState extends State<OcrScreen> {
   late List<OcrWordBlock> _wordBlocks;
-  bool _isSending = false;
-  int? _lastTouchedIndex;
 
   @override
   void initState() {
@@ -112,51 +110,27 @@ class _OcrScreenState extends State<OcrScreen> {
     return true;
   }
 
-  /// 处理触摸事件（点击或滑动）
+  /// 处理触摸事件（点击）
   void _handleTouch(int index) {
-    if (_lastTouchedIndex != null) {
-      // 滑动选择：选中两个索引之间的所有词块
-      final start = _lastTouchedIndex! < index ? _lastTouchedIndex! : index;
-      final end = _lastTouchedIndex! < index ? index : _lastTouchedIndex!;
-      
-      for (int i = start; i <= end; i++) {
-        _wordBlocks[i].isSelected = true;
-      }
-    } else {
-      // 点击选择：切换单个词块的状态
-      setState(() {
-        _wordBlocks[index].isSelected = !_wordBlocks[index].isSelected;
-      });
-    }
-    
-    _lastTouchedIndex = index;
-    setState(() {});
+    setState(() {
+      _wordBlocks[index].isSelected = !_wordBlocks[index].isSelected;
+    });
   }
 
-  /// 结束滑动选择
-  void _endDrag() {
-    _lastTouchedIndex = null;
-  }
-
-  /// 发送选中的文字
-  Future<void> _sendSelectedText() async {
+  /// 填充选中的文字到输入框
+  void _fillSelectedText() {
     final selectedText = _getSelectedText();
     if (selectedText.isEmpty) {
-      _showSnackBar('请先选择要发送的文字');
+      _showSnackBar('请先选择文字');
       return;
     }
 
-    setState(() => _isSending = true);
-
-    try {
-      await widget.onSend(selectedText);
-      if (mounted) {
-        Navigator.pop(context);
-      }
-    } catch (e) {
-      _showSnackBar('发送失败: $e');
-    } finally {
-      setState(() => _isSending = false);
+    // 将选中的文字填充到输入框
+    widget.onSend(selectedText);
+    
+    // 关闭 OCR 界面
+    if (mounted) {
+      Navigator.pop(context);
     }
   }
 
@@ -205,27 +179,6 @@ class _OcrScreenState extends State<OcrScreen> {
       ),
       body: Column(
         children: [
-          // 提示信息
-          Container(
-            padding: const EdgeInsets.all(Constants.paddingNormal),
-            color: Colors.blue.withOpacity(0.1),
-            child: Row(
-              children: [
-                Icon(Icons.touch_app, color: Colors.blue[700]),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    '点击或滑动选择词块，再次点击取消',
-                    style: TextStyle(
-                      fontSize: Constants.fontSizeNormal,
-                      color: Colors.blue[700],
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-
           // 已选择数量
           if (selectedCount > 0)
             Container(
@@ -233,17 +186,16 @@ class _OcrScreenState extends State<OcrScreen> {
                 horizontal: Constants.paddingNormal,
                 vertical: Constants.paddingSmall,
               ),
-              color: Colors.green.withOpacity(0.1),
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Icon(Icons.check_circle, color: Colors.green[700]),
+                  Icon(Icons.check_circle, color: Colors.blue[700]),
                   const SizedBox(width: 8),
                   Text(
-                    '已选择 $selectedCount 个词块',
+                    '已选择 $selectedCount 个词',
                     style: TextStyle(
                       fontSize: Constants.fontSizeNormal,
-                      color: Colors.green[700],
+                      color: Colors.blue[700],
                       fontWeight: FontWeight.bold,
                     ),
                   ),
@@ -253,74 +205,49 @@ class _OcrScreenState extends State<OcrScreen> {
 
           // 词块网格
           Expanded(
-            child: GestureDetector(
-              onPanEnd: (_) => _endDrag(),
-              child: GridView.builder(
-                padding: const EdgeInsets.all(Constants.paddingNormal),
-                gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                  crossAxisCount: 3,
-                  crossAxisSpacing: 8,
-                  mainAxisSpacing: 8,
-                  childAspectRatio: 2.5,
-                ),
-                itemCount: _wordBlocks.length,
-                itemBuilder: (context, index) {
-                  final word = _wordBlocks[index];
-                  return GestureDetector(
-                    onTap: () => _handleTouch(index),
-                    onTapDown: (_) => _handleTouch(index),
-                    onPanUpdate: (details) {
-                      final renderBox = context.findRenderObject() as RenderBox;
-                      final localPosition = renderBox.globalToLocal(details.globalPosition);
-                      final size = renderBox.size;
-                      
-                      // 检查是否在网格内
-                      if (localPosition.dx >= 0 && 
-                          localPosition.dx <= size.width &&
-                          localPosition.dy >= 0 && 
-                          localPosition.dy <= size.height) {
-                        _handleTouch(index);
-                      }
-                    },
-                    child: Container(
-                      decoration: BoxDecoration(
-                        color: word.isSelected
-                            ? Colors.green.withOpacity(0.3)
-                            : Colors.grey.withOpacity(0.1),
-                        borderRadius: BorderRadius.circular(8),
-                        border: Border.all(
-                          color: word.isSelected
-                              ? Colors.green
-                              : Colors.grey.withOpacity(0.3),
-                          width: word.isSelected ? 2 : 1,
-                        ),
+            child: GridView.builder(
+              padding: const EdgeInsets.all(Constants.paddingNormal),
+              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                crossAxisCount: 4,
+                crossAxisSpacing: 6,
+                mainAxisSpacing: 6,
+                childAspectRatio: 2.0,
+              ),
+              itemCount: _wordBlocks.length,
+              itemBuilder: (context, index) {
+                final word = _wordBlocks[index];
+                return GestureDetector(
+                  onTap: () => _handleTouch(index),
+                  child: Container(
+                    decoration: BoxDecoration(
+                      color: word.isSelected ? Colors.blue : Colors.grey[200],
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(
+                        color: word.isSelected ? Colors.blue : Colors.grey[300]!,
+                        width: 1.5,
                       ),
-                      child: Center(
-                        child: Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 4),
-                          child: Text(
-                            word.text,
-                            style: TextStyle(
-                              fontSize: word.text.length > 10 
-                                  ? Constants.fontSizeSmall 
-                                  : Constants.fontSizeNormal,
-                              color: word.isSelected
-                                  ? Colors.green[800]
-                                  : Colors.black87,
-                              fontWeight: word.isSelected
-                                  ? FontWeight.bold
-                                  : FontWeight.normal,
-                            ),
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
-                            textAlign: TextAlign.center,
+                    ),
+                    child: Center(
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+                        child: Text(
+                          word.text,
+                          style: TextStyle(
+                            fontSize: word.text.length > 6 
+                                ? Constants.fontSizeSmall 
+                                : Constants.fontSizeNormal,
+                            color: word.isSelected ? Colors.white : Colors.black87,
+                            fontWeight: word.isSelected ? FontWeight.bold : FontWeight.normal,
                           ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          textAlign: TextAlign.center,
                         ),
                       ),
                     ),
-                  );
-                },
-              ),
+                  ),
+                );
+              },
             ),
           ),
 
@@ -342,19 +269,20 @@ class _OcrScreenState extends State<OcrScreen> {
                 children: [
                   // 重拍按钮
                   Expanded(
-                    flex: 1,
                     child: SizedBox(
                       height: Constants.buttonHeight,
                       child: OutlinedButton.icon(
                         onPressed: () => Navigator.pop(context),
-                        icon: const Icon(Icons.refresh, size: 24),
+                        icon: const Icon(Icons.camera_alt, size: 20),
                         label: const Text(
                           '重拍',
                           style: TextStyle(fontSize: Constants.fontSizeNormal),
                         ),
                         style: OutlinedButton.styleFrom(
+                          foregroundColor: Colors.grey[700],
+                          side: BorderSide(color: Colors.grey[300]!),
                           shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12),
+                            borderRadius: BorderRadius.circular(20),
                           ),
                         ),
                       ),
@@ -363,39 +291,24 @@ class _OcrScreenState extends State<OcrScreen> {
 
                   const SizedBox(width: Constants.paddingNormal),
 
-                  // 发送按钮
+                  // 确认按钮
                   Expanded(
-                    flex: 2,
                     child: SizedBox(
-                      height: Constants.buttonHeightLarge,
+                      height: Constants.buttonHeight,
                       child: ElevatedButton.icon(
-                        onPressed: _isSending || selectedCount == 0
-                            ? null
-                            : _sendSelectedText,
-                        icon: _isSending
-                            ? const SizedBox(
-                                width: 24,
-                                height: 24,
-                                child: CircularProgressIndicator(
-                                  color: Colors.white,
-                                  strokeWidth: 2,
-                                ),
-                              )
-                            : const Icon(Icons.send, size: 28),
-                        label: Text(
-                          _isSending
-                              ? '发送中...'
-                              : '发送选中的',
-                          style: const TextStyle(
-                            fontSize: Constants.fontSizeLarge,
-                          ),
+                        onPressed: selectedCount == 0 ? null : _fillSelectedText,
+                        icon: const Icon(Icons.check, size: 20),
+                        label: const Text(
+                          '确认',
+                          style: TextStyle(fontSize: Constants.fontSizeNormal),
                         ),
                         style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.green,
+                          backgroundColor: Colors.blue,
                           foregroundColor: Colors.white,
-                          disabledBackgroundColor: Colors.green.withOpacity(0.3),
+                          disabledBackgroundColor: Colors.grey[300],
+                          disabledForegroundColor: Colors.grey[500],
                           shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12),
+                            borderRadius: BorderRadius.circular(20),
                           ),
                         ),
                       ),

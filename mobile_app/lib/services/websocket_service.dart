@@ -323,16 +323,22 @@ debugPrint('解析消息失败: $e');
 
   /// 处理错误
   void _onError(error) {
-debugPrint('WebSocket 错误: $error');
+debugPrint('WebSocket 错误：$error');
+    // 重置连接中标志
+    _isConnecting = false;
+    
     // 在连接中或已连接状态下都处理错误
     if (_connectionModel.isConnected || _connectionModel.isConnecting) {
-      _connectionModel.setError('连接错误: $error');
+      _connectionModel.setError('连接错误：$error');
     }
   }
 
   /// 连接关闭
   void _onDone() {
 debugPrint('WebSocket 连接已关闭');
+    // 重置连接中标志
+    _isConnecting = false;
+    
     // 在任何非断开状态下都设置为断开
     if (!_connectionModel.isDisconnected) {
       _connectionModel.setDisconnected();

@@ -315,7 +315,6 @@ class _HomeScreenState extends State<HomeScreen> {
   Future<void> _processImage(String imagePath) async {
     if (!mounted) return;
 
-    final wsService = context.read<WebSocketService>();
     final ocrService = context.read<OcrService>();
 
     BuildContext? dialogContext;
@@ -374,22 +373,9 @@ class _HomeScreenState extends State<HomeScreen> {
         MaterialPageRoute(
           builder: (context) => OcrScreen(
             textBlocks: blocks,
-            onSend: (selectedText) async {
-              if (!wsService.connectionModel.isConnected) {
-                if (mounted) _showSnackBar('未连接到电脑');
-                return;
-              }
-
-              try {
-                await wsService.sendOcrText(selectedText);
-                if (mounted) {
-                  _showSnackBar('发送成功！', isError: false);
-                }
-              } catch (e) {
-                if (mounted) {
-                  _showSnackBar('发送失败: $e');
-                }
-              }
+            onSend: (selectedText) {
+              // 将选中的文字填充到输入框
+              _textController.text = selectedText;
             },
           ),
         ),
