@@ -22,10 +22,15 @@ class OcrService {
   TextRecognizer get textRecognizer {
     if (_textRecognizer == null) {
       try {
-        _textRecognizer = TextRecognizer(script: TextRecognitionScript.latin);
-      } catch (e) {
-        debugPrint('创建 TextRecognizer 失败: $e');
         _textRecognizer = TextRecognizer();
+      } catch (e) {
+        debugPrint('创建默认 TextRecognizer 失败: $e');
+        try {
+          _textRecognizer = TextRecognizer(script: TextRecognitionScript.latin);
+        } catch (e2) {
+          debugPrint('创建 Latin TextRecognizer 也失败: $e2');
+          rethrow;
+        }
       }
     }
     return _textRecognizer!;
