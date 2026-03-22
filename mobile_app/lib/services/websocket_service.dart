@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/foundation.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
 import 'package:web_socket_channel/io.dart';
 import '../models/connection_model.dart';
@@ -22,7 +23,8 @@ class WebSocketService extends ChangeNotifier {
   final ConnectionModel _connectionModel = ConnectionModel();
   Timer? _heartbeatTimer;
   Timer? _reconnectTimer;
-  bool _shouldReconnect = true;
+  bool _shouldReconnect = false; // 默认不重连，手动连接时才重连
+  bool _isConnecting = false; // 防止重复连接
 
   ConnectionModel get connectionModel => _connectionModel;
 
@@ -31,14 +33,80 @@ class WebSocketService extends ChangeNotifier {
     _connectionModel.addListener(() {
       notifyListeners();
     });
+    // 加载保存的 IP 并尝试连接
+    _loadSavedConnection();
+  }
+
+  /// 加载保存的连接信息
+  Future<void> _loadSavedConnection() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final savedIp = prefs.getString('last_connected_ip');
+      final savedPort = prefs.getInt('last_connected_port') ?? Constants.websocketPort;
+
+      if (savedIp != null && savedIp.isNotEmpty) {
+        print('发现保存的 IP: $savedIp:$savedPort');
+        // 自动尝试连接（但不强制重连）
+        final computer = DiscoveredComputer(
+          name: '历史连接',
+          ip: savedIp,
+          port: savedPort,
+          platform: 'manual',
+        );
+        // 延迟一点再连接，确保 UI 已经加载
+        Future.delayed(const Duration(seconds: 1), () {
+          connect(computer, autoReconnect: false);
+        });
+      }
+    } catch (e) {
+      print('加载保存的连接信息失败: $e');
+    }
+  }
+
+  /// 保存连接信息
+  Future<void> _saveConnection(String ip, int port) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString('last_connected_ip', ip);
+      await prefs.setInt('last_connected_port', port);
+      print('已保存连接信息: $ip:$port');
+    } catch (e) {
+      print('保存连接信息失败: $e');
+    }
+  }
+
+  /// 清除保存的连接信息
+  Future<void> clearSavedConnection() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.remove('last_connected_ip');
+      await prefs.remove('last_connected_port');
+    } catch (e) {
+      print('清除连接信息失败: $e');
+    }
   }
 
   /// 连接到指定的电脑
-  Future<bool> connect(DiscoveredComputer computer) async {
+  Future<bool> connect(DiscoveredComputer computer, {bool autoReconnect = true}) async {
+    // 防止重复连接
+    if (_isConnecting) {
+      print('正在连接中，忽略重复请求');
+      return false;
+    }
+
+    // 如果已经连接到同一个地址，直接返回成功
+    if (_connectionModel.isConnected &&
+        _connectionModel.computerIp == computer.ip &&
+        _connectionModel.computerName == computer.name) {
+      print('已经连接到 $computer.ip，无需重复连接');
+      return true;
+    }
+
+    _isConnecting = true;
     await disconnect();
 
     _connectionModel.setConnecting();
-    _shouldReconnect = true;
+    _shouldReconnect = autoReconnect;
 
     final wsUrl = 'ws://${computer.ip}:${computer.port}';
     print('正在连接到: $wsUrl');
@@ -57,12 +125,16 @@ class WebSocketService extends ChangeNotifier {
         },
       );
 
-      // 监听连接状态
+      // 监听连接状态 - 使用 cancelOnError: false 确保 onDone 能被调用
       _channel!.stream.listen(
         _onMessage,
         onError: _onError,
         onDone: _onDone,
+        cancelOnError: false,
       );
+
+      // 保存连接信息
+      await _saveConnection(computer.ip, computer.port);
 
       _connectionModel.setConnected(computer.ip, computer.name);
 
@@ -73,16 +145,23 @@ class WebSocketService extends ChangeNotifier {
       _reconnectTimer?.cancel();
 
       print('连接成功: $wsUrl');
+      _isConnecting = false;
       return true;
     } on TimeoutException catch (e) {
       print('连接超时: $e');
       _connectionModel.setError('连接超时，请检查:\n1. IP 地址是否正确\n2. 电脑端服务是否已启动\n3. 手机和电脑是否在同一网络');
-      _scheduleReconnect(computer);
+      _isConnecting = false;
+      if (autoReconnect) {
+        _scheduleReconnect(computer);
+      }
       return false;
     } catch (e) {
       print('连接失败: $e');
       _connectionModel.setError('连接失败: $e');
-      _scheduleReconnect(computer);
+      _isConnecting = false;
+      if (autoReconnect) {
+        _scheduleReconnect(computer);
+      }
       return false;
     }
   }
@@ -95,7 +174,7 @@ class WebSocketService extends ChangeNotifier {
       port: port,
       platform: 'manual',
     );
-    return await connect(computer);
+    return await connect(computer, autoReconnect: true);
   }
 
   /// 断开连接
@@ -105,7 +184,11 @@ class WebSocketService extends ChangeNotifier {
     _reconnectTimer?.cancel();
 
     if (_channel != null) {
-      await _channel!.sink.close();
+      try {
+        await _channel!.sink.close();
+      } catch (e) {
+        print('关闭连接时出错: $e');
+      }
       _channel = null;
     }
 
@@ -153,6 +236,7 @@ class WebSocketService extends ChangeNotifier {
       switch (type) {
         case 'pong':
           // 心跳响应
+          print('收到心跳响应');
           break;
         case 'input_result':
           final success = data['success'] ?? false;
@@ -170,13 +254,19 @@ class WebSocketService extends ChangeNotifier {
   /// 处理错误
   void _onError(error) {
     print('WebSocket 错误: $error');
-    _connectionModel.setError('连接错误: $error');
+    // 只有在已连接状态下才设置为错误，避免覆盖正在连接的状态
+    if (_connectionModel.isConnected) {
+      _connectionModel.setError('连接错误: $error');
+    }
   }
 
   /// 连接关闭
   void _onDone() {
     print('WebSocket 连接已关闭');
-    _connectionModel.setDisconnected();
+    // 只有在已连接或错误状态下才设置为断开
+    if (_connectionModel.isConnected || _connectionModel.status == ConnectionStatus.error) {
+      _connectionModel.setDisconnected();
+    }
 
     // 如果需要重连
     if (_shouldReconnect && _connectionModel.computerIp.isNotEmpty) {
@@ -195,11 +285,15 @@ class WebSocketService extends ChangeNotifier {
     _heartbeatTimer?.cancel();
     _heartbeatTimer = Timer.periodic(Constants.heartbeatInterval, (_) {
       if (_channel != null && _connectionModel.isConnected) {
-        final message = {
-          'type': Constants.msgTypePing,
-          'timestamp': DateTime.now().millisecondsSinceEpoch,
-        };
-        _channel!.sink.add(jsonEncode(message));
+        try {
+          final message = {
+            'type': Constants.msgTypePing,
+            'timestamp': DateTime.now().millisecondsSinceEpoch,
+          };
+          _channel!.sink.add(jsonEncode(message));
+        } catch (e) {
+          print('发送心跳失败: $e');
+        }
       }
     });
   }
@@ -207,10 +301,14 @@ class WebSocketService extends ChangeNotifier {
   /// 安排重连
   void _scheduleReconnect(DiscoveredComputer computer) {
     _reconnectTimer?.cancel();
+    print('${_shouldReconnect ? "将" : "不"}在 ${Constants.reconnectInterval.inSeconds} 秒后重连');
+
+    if (!_shouldReconnect) return;
+
     _reconnectTimer = Timer(Constants.reconnectInterval, () {
       if (_shouldReconnect) {
         print('尝试重新连接...');
-        connect(computer);
+        connect(computer, autoReconnect: true);
       }
     });
   }

@@ -188,6 +188,14 @@ class _HomeScreenState extends State<HomeScreen> {
   void _showConnectionDialog() {
     final ipController = TextEditingController();
     bool isConnecting = false;
+    String? savedIp;
+
+    // 加载保存的 IP
+    final wsService = context.read<WebSocketService>();
+    savedIp = wsService.connectionModel.computerIp;
+    if (savedIp.isNotEmpty) {
+      ipController.text = savedIp;
+    }
 
     showDialog(
       context: context,
@@ -210,12 +218,24 @@ class _HomeScreenState extends State<HomeScreen> {
                 controller: ipController,
                 keyboardType: const TextInputType.numberWithOptions(decimal: true),
                 enabled: !isConnecting,
-                decoration: const InputDecoration(
+                decoration: InputDecoration(
                   hintText: '例如: 192.168.1.100',
-                  border: OutlineInputBorder(),
-                  prefixIcon: Icon(Icons.computer),
+                  border: const OutlineInputBorder(),
+                  prefixIcon: const Icon(Icons.computer),
+                  suffixIcon: ipController.text.isNotEmpty
+                      ? IconButton(
+                          icon: const Icon(Icons.clear),
+                          onPressed: isConnecting
+                              ? null
+                              : () {
+                                  ipController.clear();
+                                  setDialogState(() {});
+                                },
+                        )
+                      : null,
                 ),
                 style: const TextStyle(fontSize: Constants.fontSizeNormal),
+                onChanged: (_) => setDialogState(() {}),
               ),
               const SizedBox(height: 8),
               Text(
@@ -225,6 +245,16 @@ class _HomeScreenState extends State<HomeScreen> {
                   color: Colors.grey,
                 ),
               ),
+              if (savedIp != null && savedIp.isNotEmpty) ...[
+                const SizedBox(height: 8),
+                Text(
+                  '上次连接: $savedIp',
+                  style: TextStyle(
+                    fontSize: Constants.fontSizeSmall,
+                    color: Colors.blue[700],
+                  ),
+                ),
+              ],
             ],
           ),
           actions: [
@@ -232,6 +262,30 @@ class _HomeScreenState extends State<HomeScreen> {
               onPressed: isConnecting ? null : () => Navigator.pop(context),
               child: const Text('取消'),
             ),
+            if (savedIp != null && savedIp.isNotEmpty && !isConnecting)
+              TextButton(
+                onPressed: () async {
+                  setDialogState(() => isConnecting = true);
+
+                  final success = await wsService.connectManually(
+                    savedIp!,
+                    Constants.websocketPort,
+                  );
+
+                  if (mounted) {
+                    setDialogState(() => isConnecting = false);
+
+                    if (success) {
+                      Navigator.pop(context);
+                      _showSnackBar('连接成功！', isError: false);
+                    } else {
+                      final errorMsg = wsService.connectionModel.errorMessage;
+                      _showSnackBar(errorMsg.isNotEmpty ? errorMsg : '连接失败');
+                    }
+                  }
+                },
+                child: const Text('快速连接'),
+              ),
             ElevatedButton(
               onPressed: isConnecting
                   ? null
@@ -251,7 +305,6 @@ class _HomeScreenState extends State<HomeScreen> {
 
                       setDialogState(() => isConnecting = true);
 
-                      final wsService = context.read<WebSocketService>();
                       final success = await wsService.connectManually(
                         ip,
                         Constants.websocketPort,
