@@ -26,7 +26,7 @@ Future<void> _preloadOcrService() async {
     debugPrint('正在预初始化 OCR 服务...');
     final ocrService = OcrService();
     // 访问 textRecognizer getter 来触发初始化
-    final recognizer = ocrService.textRecognizer;
+    ocrService.textRecognizer;
     debugPrint('OCR 服务预初始化完成');
   } catch (e) {
     debugPrint('OCR 服务预初始化失败: $e');
@@ -34,7 +34,7 @@ Future<void> _preloadOcrService() async {
 }
 
 class TypingAssistantApp extends StatelessWidget {
-  const TypingAssistantApp({Key? key) : super(key: key);
+  const TypingAssistantApp({super.key});
 
   @override
   Widget build(BuildContext context) {

@@ -8,10 +8,10 @@ class OcrScreen extends StatefulWidget {
   final Function(String) onSend;
 
   const OcrScreen({
-    Key? key,
+    super.key,
     required this.textBlocks,
     required this.onSend,
-  }) : super(key: key);
+  });
 
   @override
   State<OcrScreen> createState() => _OcrScreenState();

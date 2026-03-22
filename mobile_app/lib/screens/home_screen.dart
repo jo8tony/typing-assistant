@@ -14,7 +14,7 @@ import 'ocr_screen.dart';
 
 /// 主界面
 class HomeScreen extends StatefulWidget {
-  const HomeScreen({Key? key}) : super(key: key);
+  const HomeScreen({super.key});
 
   @override
   State<HomeScreen> createState() => _HomeScreenState();
@@ -233,10 +233,11 @@ class _HomeScreenState extends State<HomeScreen> {
     BuildContext? dialogContext;
     
     try {
-      print('开始 OCR 识别: $imagePath');
+      debugPrint('开始 OCR 识别: $imagePath');
       
       if (!mounted) return;
       
+      if (!mounted) return;
       showDialog(
         context: context,
         barrierDismissible: false,
@@ -251,21 +252,21 @@ class _HomeScreenState extends State<HomeScreen> {
       final file = File(imagePath);
       
       final exists = await file.exists();
-      print('文件存在: $exists');
+      debugPrint('文件存在: $exists');
       
       if (!exists) {
         throw Exception('图片文件不存在: $imagePath');
       }
       
       final fileSize = await file.length();
-      print('文件大小: $fileSize bytes');
+      debugPrint('文件大小: $fileSize bytes');
       
       if (fileSize == 0) {
         throw Exception('图片文件为空');
       }
 
       final blocks = await ocrService.recognizeText(file);
-      print('OCR 识别完成，结果数量: ${blocks.length}');
+      debugPrint('OCR 识别完成，结果数量: ${blocks.length}');
 
       if (dialogContext != null && dialogContext!.mounted) {
         Navigator.pop(dialogContext!);
@@ -278,6 +279,7 @@ class _HomeScreenState extends State<HomeScreen> {
         return;
       }
 
+      if (!mounted) return;
       await Navigator.push(
         context,
         MaterialPageRoute(
@@ -304,8 +306,8 @@ class _HomeScreenState extends State<HomeScreen> {
         ),
       );
     } on PlatformException catch (e) {
-      print('OCR 平台异常: ${e.code} - ${e.message}');
-      print('详细信息: ${e.details}');
+      debugPrint('OCR 平台异常: ${e.code} - ${e.message}');
+      debugPrint('详细信息: ${e.details}');
       if (dialogContext != null && dialogContext!.mounted) {
         Navigator.pop(dialogContext!);
       }
@@ -313,8 +315,8 @@ class _HomeScreenState extends State<HomeScreen> {
         _showSnackBar('识别失败: ${e.message ?? e.code}');
       }
     } catch (e, stackTrace) {
-      print('OCR 处理异常: $e');
-      print('堆栈: $stackTrace');
+      debugPrint('OCR 处理异常: $e');
+      debugPrint('堆栈: $stackTrace');
       if (dialogContext != null && dialogContext!.mounted) {
         Navigator.pop(dialogContext!);
       }
