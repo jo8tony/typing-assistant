@@ -53,13 +53,16 @@ class TypingServer:
     
     async def handle_message(self, websocket: WebSocketServerProtocol, message: str):
         """处理客户端消息"""
+        client_ip = websocket.remote_address[0]
         try:
+            print(f"收到消息来自 {client_ip}: {message[:100]}{'...' if len(message) > 100 else ''}")
             data = json.loads(message)
             msg_type = data.get('type')
             
             if msg_type == 'text':
                 # 处理文字输入
                 content = data.get('content', '')
+                print(f"处理文字输入请求，内容长度: {len(content)}")
                 if content:
                     success = self.simulator.type_text(content)
                     response = {
@@ -68,7 +71,7 @@ class TypingServer:
                         'message': '输入成功' if success else '输入失败',
                     }
                     await websocket.send(json.dumps(response, ensure_ascii=False))
-                    print(f"输入文字: {content[:50]}{'...' if len(content) > 50 else ''}")
+                    print(f"输入文字完成: {content[:50]}{'...' if len(content) > 50 else ''} (成功: {success})")
                     
             elif msg_type == 'ping':
                 # 处理心跳
