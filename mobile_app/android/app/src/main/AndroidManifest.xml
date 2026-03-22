@@ -30,9 +30,14 @@
         android:usesCleartextTraffic="true"
         android:requestLegacyExternalStorage="true">
         
-        <!-- ML Kit 配置 -->
+        <!-- ML Kit 配置 - 应用安装时自动下载 OCR 模型 -->
         <meta-data
             android:name="com.google.mlkit.vision.DEPENDENCIES"
+            android:value="ocr" />
+        
+        <!-- 启用 Google Play Services 模块自动安装 -->
+        <meta-data
+            android:name="com.google.android.gms.vision.DEPENDENCIES"
             android:value="ocr" />
         
         <activity

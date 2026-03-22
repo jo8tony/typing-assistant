@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'services/websocket_service.dart';
+import 'services/ocr_service.dart';
 import 'screens/home_screen.dart';
 
 void main() {
@@ -13,17 +14,37 @@ void main() {
     DeviceOrientation.portraitDown,
   ]);
   
+  // 预初始化 OCR 服务，提前触发模型加载
+  _preloadOcrService();
+  
   runApp(const TypingAssistantApp());
 }
 
+/// 预加载 OCR 服务
+Future<void> _preloadOcrService() async {
+  try {
+    debugPrint('正在预初始化 OCR 服务...');
+    final ocrService = OcrService();
+    // 访问 textRecognizer getter 来触发初始化
+    final recognizer = ocrService.textRecognizer;
+    debugPrint('OCR 服务预初始化完成');
+  } catch (e) {
+    debugPrint('OCR 服务预初始化失败: $e');
+  }
+}
+
 class TypingAssistantApp extends StatelessWidget {
-  const TypingAssistantApp({Key? key}) : super(key: key);
+  const TypingAssistantApp({Key? key) : super(key: key);
 
   @override
   Widget build(BuildContext context) {
     return MultiProvider(
       providers: [
         ChangeNotifierProvider(create: (_) => WebSocketService()),
+        Provider<OcrService>(
+          create: (_) => OcrService(),
+          dispose: (_, service) => service.dispose(),
+        ),
       ],
       child: MaterialApp(
         title: '跨设备打字助手',

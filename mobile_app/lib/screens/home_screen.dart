@@ -23,7 +23,6 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> {
   final TextEditingController _textController = TextEditingController();
   final DiscoveryService _discoveryService = DiscoveryService();
-  final OcrService _ocrService = OcrService();
   final ImagePicker _imagePicker = ImagePicker();
   bool _isSending = false;
 
@@ -37,7 +36,6 @@ class _HomeScreenState extends State<HomeScreen> {
   void dispose() {
     _textController.dispose();
     _discoveryService.dispose();
-    _ocrService.dispose();
     super.dispose();
   }
 
@@ -230,6 +228,7 @@ class _HomeScreenState extends State<HomeScreen> {
     if (!mounted) return;
 
     final wsService = context.read<WebSocketService>();
+    final ocrService = context.read<OcrService>();
 
     BuildContext? dialogContext;
     
@@ -265,7 +264,7 @@ class _HomeScreenState extends State<HomeScreen> {
         throw Exception('图片文件为空');
       }
 
-      final blocks = await _ocrService.recognizeText(file);
+      final blocks = await ocrService.recognizeText(file);
       print('OCR 识别完成，结果数量: ${blocks.length}');
 
       if (dialogContext != null && dialogContext!.mounted) {
