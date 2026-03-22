@@ -132,13 +132,16 @@ class _HomeScreenState extends State<HomeScreen> {
 
   /// 处理图片进行 OCR
   Future<void> _processImage(String imagePath) async {
-    // 提前获取 WebSocketService，避免在回调中使用 context
+    if (!mounted) return;
+
     final wsService = context.read<WebSocketService>();
+
+    if (!mounted) return;
 
     showDialog(
       context: context,
       barrierDismissible: false,
-      builder: (context) => const Center(
+      builder: (dialogContext) => const Center(
         child: CircularProgressIndicator(),
       ),
     );
@@ -148,7 +151,7 @@ class _HomeScreenState extends State<HomeScreen> {
       final blocks = await _ocrService.recognizeText(file);
 
       if (!mounted) return;
-      Navigator.pop(context); // 关闭加载对话框
+      Navigator.pop(context);
 
       if (blocks.isEmpty) {
         _showSnackBar('未识别到文字');
@@ -157,7 +160,6 @@ class _HomeScreenState extends State<HomeScreen> {
 
       if (!mounted) return;
 
-      // 跳转到 OCR 结果选择界面
       await Navigator.push(
         context,
         MaterialPageRoute(
