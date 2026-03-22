@@ -94,14 +94,13 @@ class _HomeScreenState extends State<HomeScreen> {
 
   /// 拍照识别
   Future<void> _takePhoto() async {
-    // 请求相机权限
-    final status = await Permission.camera.request();
-    if (!status.isGranted) {
-      _showSnackBar('需要相机权限才能拍照');
-      return;
-    }
-
     try {
+      final status = await Permission.camera.request();
+      if (!status.isGranted) {
+        _showSnackBar('需要相机权限才能拍照');
+        return;
+      }
+
       final XFile? photo = await _imagePicker.pickImage(
         source: ImageSource.camera,
         preferredCameraDevice: CameraDevice.rear,
@@ -110,7 +109,9 @@ class _HomeScreenState extends State<HomeScreen> {
       if (photo != null) {
         await _processImage(photo.path);
       }
-    } catch (e) {
+    } catch (e, stackTrace) {
+      print('拍照异常: $e');
+      print('堆栈: $stackTrace');
       _showSnackBar('拍照失败: $e');
     }
   }
@@ -125,7 +126,9 @@ class _HomeScreenState extends State<HomeScreen> {
       if (image != null) {
         await _processImage(image.path);
       }
-    } catch (e) {
+    } catch (e, stackTrace) {
+      print('选择图片异常: $e');
+      print('堆栈: $stackTrace');
       _showSnackBar('选择图片失败: $e');
     }
   }
@@ -147,8 +150,13 @@ class _HomeScreenState extends State<HomeScreen> {
     );
 
     try {
+      print('开始 OCR 识别: $imagePath');
       final file = File(imagePath);
+      print('文件存在: ${await file.exists()}');
+      print('文件大小: ${await file.length()}');
+
       final blocks = await _ocrService.recognizeText(file);
+      print('OCR 识别完成，结果数量: ${blocks.length}');
 
       if (!mounted) return;
       Navigator.pop(context);
@@ -185,7 +193,9 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
         ),
       );
-    } catch (e) {
+    } catch (e, stackTrace) {
+      print('OCR 处理异常: $e');
+      print('堆栈: $stackTrace');
       if (mounted) {
         Navigator.pop(context);
         _showSnackBar('识别失败: $e');
