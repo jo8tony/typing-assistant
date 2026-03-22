@@ -251,7 +251,7 @@ class _OcrScreenState extends State<OcrScreen> {
           ),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withValues(alpha: 0.05),
+              color: Colors.black.withOpacity(0.05),
               blurRadius: 2,
               offset: const Offset(0, 1),
             ),
