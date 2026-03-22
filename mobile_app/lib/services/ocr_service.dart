@@ -14,9 +14,10 @@ class OcrTextBlock {
   });
 }
 
-/// OCR 文字识别服务
+/// OCR 文字识别服务 - 支持中文
 class OcrService {
-  final TextRecognizer _textRecognizer = TextRecognizer();
+  // 使用中文脚本配置 TextRecognizer
+  final TextRecognizer _textRecognizer = TextRecognizer(script: TextRecognitionScript.chinese);
 
   /// 识别图片中的文字
   Future<List<OcrTextBlock>> recognizeText(File imageFile) async {
