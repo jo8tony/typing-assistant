@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'services/websocket_service.dart';
 import 'services/ocr_service.dart';
+import 'services/text_history_service.dart';
 import 'screens/home_screen.dart';
 
 void main() {
@@ -41,6 +42,7 @@ class TypingAssistantApp extends StatelessWidget {
     return MultiProvider(
       providers: [
         ChangeNotifierProvider(create: (_) => WebSocketService()),
+        ChangeNotifierProvider(create: (_) => TextHistoryService()),
         Provider<OcrService>(
           create: (_) => OcrService(),
           dispose: (_, service) => service.dispose(),

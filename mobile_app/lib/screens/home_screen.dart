@@ -8,6 +8,7 @@ import 'package:device_info_plus/device_info_plus.dart';
 import '../services/websocket_service.dart';
 import '../services/discovery_service.dart';
 import '../services/ocr_service.dart';
+import '../services/text_history_service.dart';
 import '../widgets/connection_status.dart';
 import '../utils/constants.dart';
 import 'ocr_screen.dart';
@@ -37,6 +38,86 @@ class _HomeScreenState extends State<HomeScreen> {
     _textController.dispose();
     _discoveryService.dispose();
     super.dispose();
+  }
+
+  /// 显示历史记录对话框
+  void _showHistoryDialog() {
+    final historyService = context.read<TextHistoryService>();
+    
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Row(
+          children: [
+            const Text('历史记录'),
+            const Spacer(),
+            IconButton(
+              icon: const Icon(Icons.close, size: 20),
+              onPressed: () => Navigator.pop(context),
+              padding: EdgeInsets.zero,
+              constraints: const BoxConstraints(),
+            ),
+          ],
+        ),
+        content: SizedBox(
+          width: double.maxFinite,
+          child: Consumer<TextHistoryService>(
+            builder: (context, service, child) {
+              if (service.isLoading) {
+                return const Center(child: CircularProgressIndicator());
+              }
+              
+              if (service.history.isEmpty) {
+                return const Center(
+                  child: Text('暂无历史记录'),
+                );
+              }
+              
+              return ListView.separated(
+                shrinkWrap: true,
+                itemCount: service.history.length,
+                separatorBuilder: (context, index) => const Divider(height: 1),
+                itemBuilder: (context, index) {
+                  final text = service.history[index];
+                  return ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    title: Text(
+                      text,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(fontSize: Constants.fontSizeNormal),
+                    ),
+                    trailing: IconButton(
+                      icon: const Icon(Icons.delete_outline, size: 20),
+                      onPressed: () {
+                        historyService.removeHistory(text);
+                      },
+                    ),
+                    onTap: () {
+                      _textController.text = text;
+                      Navigator.pop(context);
+                    },
+                  );
+                },
+              );
+            },
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () {
+              historyService.clearHistory();
+              Navigator.pop(context);
+            },
+            child: const Text('清空历史'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('关闭'),
+          ),
+        ],
+      ),
+    );
   }
 
   /// 初始化发现服务
@@ -83,10 +164,15 @@ class _HomeScreenState extends State<HomeScreen> {
 
     try {
       await wsService.sendText(text);
+      
+      // 保存到历史记录
+      final historyService = context.read<TextHistoryService>();
+      historyService.addHistory(text);
+      
       _textController.clear();
       _showSnackBar('发送成功！', isError: false);
     } catch (e) {
-      _showSnackBar('发送失败: $e');
+      _showSnackBar('发送失败：$e');
     } finally {
       setState(() => _isSending = false);
     }
@@ -358,19 +444,32 @@ class _HomeScreenState extends State<HomeScreen> {
 
     showDialog(
       context: context,
-      barrierDismissible: false,
+      barrierDismissible: true,
       builder: (context) => StatefulBuilder(
         builder: (context, setDialogState) => AlertDialog(
-          title: const Text(
-            '连接设置',
-            style: TextStyle(fontSize: Constants.fontSizeLarge),
+          title: Row(
+            children: [
+              const Text(
+                '连接设置',
+                style: TextStyle(fontSize: Constants.fontSizeLarge),
+              ),
+              const Spacer(),
+              // 关闭按钮
+              IconButton(
+                icon: const Icon(Icons.close, size: 24),
+                onPressed: () => Navigator.pop(context),
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints(),
+              ),
+            ],
           ),
-          content: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 400),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
+          content: SingleChildScrollView(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 400),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
                 // 当前连接状态显示
                 Consumer<WebSocketService>(
                   builder: (context, service, child) {
@@ -559,23 +658,28 @@ class _HomeScreenState extends State<HomeScreen> {
                 ],
                 if (savedIp != null && savedIp.isNotEmpty) ...[
                   const SizedBox(height: 12),
-                  Text(
-                    '上次连接: $savedIp',
-                    style: TextStyle(
-                      fontSize: Constants.fontSizeSmall,
-                      color: Colors.blue[700],
-                    ),
+                  Row(
+                    children: [
+                      Icon(Icons.history, size: 16, color: Colors.blue[700]),
+                      const SizedBox(width: 4),
+                      Expanded(
+                        child: Text(
+                          '上次：$savedIp',
+                          style: TextStyle(
+                            fontSize: Constants.fontSizeSmall,
+                            color: Colors.blue[700],
+                          ),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ],
                   ),
                 ],
               ],
             ),
           ),
           actions: [
-            TextButton(
-              onPressed: isConnecting || isTesting ? null : () => Navigator.pop(context),
-              child: const Text('取消'),
-            ),
-            // 断开连接按钮
+            // 断开连接按钮（只在已连接时显示）
             Consumer<WebSocketService>(
               builder: (context, service, child) {
                 final isConnected = service.connectionModel.isConnected;
@@ -588,43 +692,16 @@ class _HomeScreenState extends State<HomeScreen> {
                           _showSnackBar('已断开连接', isError: false);
                           setDialogState(() {});
                         },
-                  icon: const Icon(Icons.link_off, color: Colors.red),
+                  icon: const Icon(Icons.link_off, color: Colors.red, size: 20),
                   label: const Text(
-                    '断开连接',
-                    style: TextStyle(color: Colors.red),
+                    '断开',
+                    style: TextStyle(color: Colors.red, fontSize: Constants.fontSizeNormal),
                   ),
                 );
               },
             ),
-            // 快速连接按钮
-            if (savedIp != null && savedIp.isNotEmpty && !isConnecting)
-              TextButton(
-                onPressed: isTesting
-                    ? null
-                    : () async {
-                        setDialogState(() => isConnecting = true);
-
-                        final success = await wsService.connectManually(
-                          savedIp!,
-                          Constants.websocketPort,
-                        );
-
-                        if (mounted) {
-                          setDialogState(() => isConnecting = false);
-
-                          if (success) {
-                            Navigator.pop(context);
-                            _showSnackBar('连接成功！', isError: false);
-                          } else {
-                            final errorMsg = wsService.connectionModel.errorMessage;
-                            _showSnackBar(errorMsg.isNotEmpty ? errorMsg : '连接失败');
-                          }
-                        }
-                      },
-                child: const Text('快速连接'),
-              ),
             // 连接按钮
-            ElevatedButton(
+            ElevatedButton.icon(
               onPressed: isConnecting || isTesting
                   ? null
                   : () async {
@@ -660,13 +737,17 @@ class _HomeScreenState extends State<HomeScreen> {
                         }
                       }
                     },
-              child: isConnecting
+              icon: isConnecting
                   ? const SizedBox(
                       width: 20,
                       height: 20,
                       child: CircularProgressIndicator(strokeWidth: 2),
                     )
-                  : const Text('连接'),
+                  : const Icon(Icons.link, size: 20),
+              label: Text(
+                isConnecting ? '连接中' : '连接',
+                style: const TextStyle(fontSize: Constants.fontSizeNormal),
+              ),
             ),
           ],
         ),
@@ -685,9 +766,14 @@ class _HomeScreenState extends State<HomeScreen> {
         centerTitle: true,
         actions: [
           IconButton(
+            icon: const Icon(Icons.history),
+            onPressed: _showHistoryDialog,
+            tooltip: '历史记录',
+          ),
+          IconButton(
             icon: const Icon(Icons.settings),
             onPressed: _showConnectionDialog,
-            tooltip: '手动连接',
+            tooltip: '连接设置',
           ),
         ],
       ),

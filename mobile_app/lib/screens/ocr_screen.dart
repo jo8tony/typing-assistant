@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import '../services/ocr_service.dart';
 import '../utils/constants.dart';
 
-/// OCR 结果选择界面
+/// OCR 结果选择界面（支持词块拆分和滑动选择）
 class OcrScreen extends StatefulWidget {
   final List<OcrTextBlock> textBlocks;
   final Function(String) onSend;
@@ -18,20 +18,125 @@ class OcrScreen extends StatefulWidget {
 }
 
 class _OcrScreenState extends State<OcrScreen> {
-  late List<OcrTextBlock> _blocks;
+  late List<OcrWordBlock> _wordBlocks;
   bool _isSending = false;
+  bool _isSelectionMode = false;
+  int? _lastTouchedIndex;
 
   @override
   void initState() {
     super.initState();
-    _blocks = List.from(widget.textBlocks);
+    _wordBlocks = _splitBlocksIntoWords(widget.textBlocks);
+  }
+
+  /// 将大块文本拆分成词块
+  List<OcrWordBlock> _splitBlocksIntoWords(List<OcrTextBlock> blocks) {
+    List<OcrWordBlock> words = [];
+    int wordIndex = 0;
+
+    for (int i = 0; i < blocks.length; i++) {
+      final block = blocks[i];
+      // 按空格、标点符号等拆分，但保留中文词语
+      final text = block.text.trim();
+      
+      // 简单的拆分逻辑：按空格和标点拆分
+      final RegExp splitPattern = RegExp(r'[\s,，.。！？!？;；:：、]+');
+      final parts = text.split(splitPattern).where((s) => s.isNotEmpty).toList();
+      
+      for (final part in parts) {
+        words.add(OcrWordBlock(
+          text: part,
+          originalIndex: i,
+          wordIndex: wordIndex++,
+        ));
+      }
+      
+      // 如果没有拆分出任何部分，至少保留原文本
+      if (parts.isEmpty && text.isNotEmpty) {
+        words.add(OcrWordBlock(
+          text: text,
+          originalIndex: i,
+          wordIndex: wordIndex++,
+        ));
+      }
+    }
+
+    return words;
   }
 
   /// 获取选中的文字
   String _getSelectedText() {
-    final selectedBlocks = _blocks.where((b) => b.isSelected).toList();
-    if (selectedBlocks.isEmpty) return '';
-    return selectedBlocks.map((b) => b.text).join('\n');
+    final selectedWords = _wordBlocks.where((w) => w.isSelected).toList();
+    if (selectedWords.isEmpty) return '';
+    
+    // 按顺序组合选中的词块
+    selectedWords.sort((a, b) => a.wordIndex.compareTo(b.wordIndex));
+    
+    // 智能组合：中文不加空格，英文加空格
+    final buffer = StringBuffer();
+    String? lastText;
+    
+    for (final word in selectedWords) {
+      if (buffer.isEmpty) {
+        buffer.write(word.text);
+      } else {
+        // 判断是否需要添加空格
+        final needSpace = _needSpaceBetween(lastText!, word.text);
+        if (needSpace) {
+          buffer.write(' ');
+        }
+        buffer.write(word.text);
+      }
+      lastText = word.text;
+    }
+    
+    return buffer.toString();
+  }
+
+  /// 判断两个文本之间是否需要空格
+  bool _needSpaceBetween(String text1, String text2) {
+    if (text1.isEmpty || text2.isEmpty) return false;
+    
+    final lastChar = text1.codeUnitAt(text1.length - 1);
+    final firstChar = text2.codeUnitAt(0);
+    
+    // 中文字符范围
+    final isLastCharChinese = lastChar >= 0x4E00 && lastChar <= 0x9FFF;
+    final isFirstCharChinese = firstChar >= 0x4E00 && firstChar <= 0x9FFF;
+    
+    // 如果最后字符和首字符都是中文，不需要空格
+    if (isLastCharChinese && isFirstCharChinese) {
+      return false;
+    }
+    
+    // 其他情况添加空格
+    return true;
+  }
+
+  /// 处理触摸事件（点击或滑动）
+  void _handleTouch(int index) {
+    if (_lastTouchedIndex != null) {
+      // 滑动选择：选中两个索引之间的所有词块
+      final start = _lastTouchedIndex! < index ? _lastTouchedIndex! : index;
+      final end = _lastTouchedIndex! < index ? index : _lastTouchedIndex!;
+      
+      for (int i = start; i <= end; i++) {
+        _wordBlocks[i].isSelected = true;
+      }
+    } else {
+      // 点击选择：切换单个词块的状态
+      setState(() {
+        _wordBlocks[index].isSelected = !_wordBlocks[index].isSelected;
+      });
+    }
+    
+    _lastTouchedIndex = index;
+    setState(() {});
+  }
+
+  /// 结束滑动选择
+  void _endDrag() {
+    _lastTouchedIndex = null;
   }
 
   /// 发送选中的文字
@@ -72,19 +177,32 @@ class _OcrScreenState extends State<OcrScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final selectedCount = _blocks.where((b) => b.isSelected).length;
+    final selectedCount = _wordBlocks.where((w) => w.isSelected).length;
 
     return Scaffold(
       appBar: AppBar(
         title: const Text(
-          '选择要发送的文字',
+          '选择文字',
           style: TextStyle(fontSize: Constants.fontSizeLarge),
         ),
         centerTitle: true,
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back),
+          icon: const Icon(Icons.close),
           onPressed: () => Navigator.pop(context),
         ),
+        actions: [
+          if (selectedCount > 0)
+            TextButton(
+              onPressed: () {
+                setState(() {
+                  for (var word in _wordBlocks) {
+                    word.isSelected = false;
+                  }
+                });
+              },
+              child: const Text('清空'),
+            ),
+        ],
       ),
       body: Column(
         children: [
@@ -94,11 +212,11 @@ class _OcrScreenState extends State<OcrScreen> {
             color: Colors.blue.withOpacity(0.1),
             child: Row(
               children: [
-                const Icon(Icons.info_outline, color: Colors.blue),
+                Icon(Icons.touch_app, color: Colors.blue[700]),
                 const SizedBox(width: 8),
                 Expanded(
                   child: Text(
-                    '点击文字块进行选择，再次点击取消选择',
+                    '点击或滑动选择词块，再次点击取消',
                     style: TextStyle(
                       fontSize: Constants.fontSizeNormal,
                       color: Colors.blue[700],
@@ -123,7 +241,7 @@ class _OcrScreenState extends State<OcrScreen> {
                   Icon(Icons.check_circle, color: Colors.green[700]),
                   const SizedBox(width: 8),
                   Text(
-                    '已选择 $selectedCount 段文字',
+                    '已选择 $selectedCount 个词块',
                     style: TextStyle(
                       fontSize: Constants.fontSizeNormal,
                       color: Colors.green[700],
@@ -134,65 +252,76 @@ class _OcrScreenState extends State<OcrScreen> {
               ),
             ),
 
-          // 文字列表
+          // 词块网格
           Expanded(
-            child: ListView.builder(
-              padding: const EdgeInsets.all(Constants.paddingNormal),
-              itemCount: _blocks.length,
-              itemBuilder: (context, index) {
-                final block = _blocks[index];
-                return Padding(
-                  padding: const EdgeInsets.only(bottom: Constants.paddingSmall),
-                  child: InkWell(
-                    onTap: () {
-                      setState(() {
-                        block.isSelected = !block.isSelected;
-                      });
+            child: GestureDetector(
+              onPanEnd: (_) => _endDrag(),
+              child: GridView.builder(
+                padding: const EdgeInsets.all(Constants.paddingNormal),
+                gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                  crossAxisCount: 3,
+                  crossAxisSpacing: 8,
+                  mainAxisSpacing: 8,
+                  childAspectRatio: 2.5,
+                ),
+                itemCount: _wordBlocks.length,
+                itemBuilder: (context, index) {
+                  final word = _wordBlocks[index];
+                  return GestureDetector(
+                    onTap: () => _handleTouch(index),
+                    onTapDown: (_) => _handleTouch(index),
+                    onPanUpdate: (details) {
+                      final renderBox = context.findRenderObject() as RenderBox;
+                      final localPosition = renderBox.globalToLocal(details.globalPosition);
+                      final size = renderBox.size;
+                      
+                      // 检查是否在网格内
+                      if (localPosition.dx >= 0 && 
+                          localPosition.dx <= size.width &&
+                          localPosition.dy >= 0 && 
+                          localPosition.dy <= size.height) {
+                        _handleTouch(index);
+                      }
                     },
                     child: Container(
-                      padding: const EdgeInsets.all(Constants.paddingNormal),
                       decoration: BoxDecoration(
-                        color: block.isSelected
-                            ? Colors.green.withOpacity(0.2)
+                        color: word.isSelected
+                            ? Colors.green.withOpacity(0.3)
                             : Colors.grey.withOpacity(0.1),
-                        borderRadius: BorderRadius.circular(12),
+                        borderRadius: BorderRadius.circular(8),
                         border: Border.all(
-                          color: block.isSelected
+                          color: word.isSelected
                               ? Colors.green
                               : Colors.grey.withOpacity(0.3),
-                          width: block.isSelected ? 2 : 1,
+                          width: word.isSelected ? 2 : 1,
                         ),
                       ),
-                      child: Row(
-                        children: [
-                          Icon(
-                            block.isSelected
-                                ? Icons.check_circle
-                                : Icons.radio_button_unchecked,
-                            color: block.isSelected ? Colors.green : Colors.grey,
-                            size: 28,
-                          ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: Text(
-                              block.text,
-                              style: TextStyle(
-                                fontSize: Constants.fontSizeLarge,
-                                color: block.isSelected
-                                    ? Colors.green[800]
-                                    : Colors.black87,
-                                fontWeight: block.isSelected
-                                    ? FontWeight.bold
-                                    : FontWeight.normal,
-                              ),
+                      child: Center(
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 4),
+                          child: Text(
+                            word.text,
+                            style: TextStyle(
+                              fontSize: word.text.length > 10 
+                                  ? Constants.fontSizeSmall 
+                                  : Constants.fontSizeNormal,
+                              color: word.isSelected
+                                  ? Colors.green[800]
+                                  : Colors.black87,
+                              fontWeight: word.isSelected
+                                  ? FontWeight.bold
+                                  : FontWeight.normal,
                             ),
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            textAlign: TextAlign.center,
                           ),
-                        ],
+                        ),
                       ),
                     ),
-                  ),
-                );
-              },
+                  );
+                },
+              ),
             ),
           ),
 
@@ -257,7 +386,7 @@ class _OcrScreenState extends State<OcrScreen> {
                         label: Text(
                           _isSending
                               ? '发送中...'
-                              : '发送 ($selectedCount)',
+                              : '发送选中的',
                           style: const TextStyle(
                             fontSize: Constants.fontSizeLarge,
                           ),

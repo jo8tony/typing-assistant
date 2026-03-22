@@ -15,6 +15,21 @@ class OcrTextBlock {
   });
 }
 
+/// OCR 词块单元（用于拆分后的词块选择）
+class OcrWordBlock {
+  final String text;
+  final int originalIndex;
+  final int wordIndex;
+  bool isSelected;
+
+  OcrWordBlock({
+    required this.text,
+    required this.originalIndex,
+    required this.wordIndex,
+    this.isSelected = false,
+  });
+}
+
 class OcrService {
   TextRecognizer? _textRecognizer;
   bool _isDisposed = false;
