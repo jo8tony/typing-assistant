@@ -8,6 +8,14 @@ import '../models/connection_model.dart';
 import '../utils/constants.dart';
 import 'discovery_service.dart';
 
+/// 超时异常
+class TimeoutException implements Exception {
+  final String message;
+  TimeoutException(this.message);
+  @override
+  String toString() => message;
+}
+
 /// WebSocket 通信服务
 class WebSocketService extends ChangeNotifier {
   WebSocketChannel? _channel;
@@ -18,20 +26,35 @@ class WebSocketService extends ChangeNotifier {
 
   ConnectionModel get connectionModel => _connectionModel;
 
+  WebSocketService() {
+    // 监听连接模型的变化，并通知 UI 更新
+    _connectionModel.addListener(() {
+      notifyListeners();
+    });
+  }
+
   /// 连接到指定的电脑
-  Future<void> connect(DiscoveredComputer computer) async {
+  Future<bool> connect(DiscoveredComputer computer) async {
     await disconnect();
 
     _connectionModel.setConnecting();
     _shouldReconnect = true;
 
-    try {
-      final wsUrl = 'ws://${computer.ip}:${computer.port}';
-      print('正在连接到: $wsUrl');
+    final wsUrl = 'ws://${computer.ip}:${computer.port}';
+    print('正在连接到: $wsUrl');
 
+    try {
       _channel = IOWebSocketChannel.connect(
         wsUrl,
-        connectTimeout: const Duration(seconds: 10),
+        connectTimeout: const Duration(seconds: 5),
+      );
+
+      // 等待连接建立或超时
+      await _channel!.ready.timeout(
+        const Duration(seconds: 5),
+        onTimeout: () {
+          throw TimeoutException('连接超时，请检查 IP 地址和端口是否正确');
+        },
       );
 
       // 监听连接状态
@@ -49,22 +72,30 @@ class WebSocketService extends ChangeNotifier {
       // 取消重连定时器
       _reconnectTimer?.cancel();
 
+      print('连接成功: $wsUrl');
+      return true;
+    } on TimeoutException catch (e) {
+      print('连接超时: $e');
+      _connectionModel.setError('连接超时，请检查:\n1. IP 地址是否正确\n2. 电脑端服务是否已启动\n3. 手机和电脑是否在同一网络');
+      _scheduleReconnect(computer);
+      return false;
     } catch (e) {
       print('连接失败: $e');
       _connectionModel.setError('连接失败: $e');
       _scheduleReconnect(computer);
+      return false;
     }
   }
 
   /// 手动连接到指定 IP
-  Future<void> connectManually(String ip, int port) async {
+  Future<bool> connectManually(String ip, int port) async {
     final computer = DiscoveredComputer(
       name: '手动输入',
       ip: ip,
       port: port,
       platform: 'manual',
     );
-    await connect(computer);
+    return await connect(computer);
   }
 
   /// 断开连接

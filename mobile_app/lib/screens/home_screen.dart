@@ -185,52 +185,99 @@ class _HomeScreenState extends State<HomeScreen> {
   /// 显示连接对话框
   void _showConnectionDialog() {
     final ipController = TextEditingController();
+    bool isConnecting = false;
 
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text(
-          '手动连接',
-          style: TextStyle(fontSize: Constants.fontSizeLarge),
-        ),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Text(
-              '请输入电脑的 IP 地址',
-              style: TextStyle(fontSize: Constants.fontSizeNormal),
-            ),
-            const SizedBox(height: 16),
-            TextField(
-              controller: ipController,
-              keyboardType: TextInputType.number,
-              decoration: const InputDecoration(
-                hintText: '例如: 192.168.1.100',
-                border: OutlineInputBorder(),
+      barrierDismissible: false,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: const Text(
+            '手动连接',
+            style: TextStyle(fontSize: Constants.fontSizeLarge),
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text(
+                '请输入电脑的 IP 地址',
+                style: TextStyle(fontSize: Constants.fontSizeNormal),
               ),
-              style: const TextStyle(fontSize: Constants.fontSizeNormal),
+              const SizedBox(height: 16),
+              TextField(
+                controller: ipController,
+                keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                enabled: !isConnecting,
+                decoration: const InputDecoration(
+                  hintText: '例如: 192.168.1.100',
+                  border: OutlineInputBorder(),
+                  prefixIcon: Icon(Icons.computer),
+                ),
+                style: const TextStyle(fontSize: Constants.fontSizeNormal),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                '端口: ${Constants.websocketPort}',
+                style: const TextStyle(
+                  fontSize: Constants.fontSizeSmall,
+                  color: Colors.grey,
+                ),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: isConnecting ? null : () => Navigator.pop(context),
+              child: const Text('取消'),
+            ),
+            ElevatedButton(
+              onPressed: isConnecting
+                  ? null
+                  : () async {
+                      final ip = ipController.text.trim();
+                      if (ip.isEmpty) {
+                        _showSnackBar('请输入 IP 地址');
+                        return;
+                      }
+
+                      // 简单的 IP 格式验证
+                      final ipRegex = RegExp(r'^(\d{1,3}\.){3}\d{1,3}$');
+                      if (!ipRegex.hasMatch(ip)) {
+                        _showSnackBar('IP 地址格式不正确');
+                        return;
+                      }
+
+                      setDialogState(() => isConnecting = true);
+
+                      final wsService = context.read<WebSocketService>();
+                      final success = await wsService.connectManually(
+                        ip,
+                        Constants.websocketPort,
+                      );
+
+                      if (mounted) {
+                        setDialogState(() => isConnecting = false);
+
+                        if (success) {
+                          Navigator.pop(context);
+                          _showSnackBar('连接成功！', isError: false);
+                        } else {
+                          // 显示错误信息，但不关闭对话框
+                          final errorMsg = wsService.connectionModel.errorMessage;
+                          _showSnackBar(errorMsg.isNotEmpty ? errorMsg : '连接失败');
+                        }
+                      }
+                    },
+              child: isConnecting
+                  ? const SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Text('连接'),
             ),
           ],
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('取消'),
-          ),
-          ElevatedButton(
-            onPressed: () {
-              final ip = ipController.text.trim();
-              if (ip.isNotEmpty) {
-                context.read<WebSocketService>().connectManually(
-                  ip,
-                  Constants.websocketPort,
-                );
-                Navigator.pop(context);
-              }
-            },
-            child: const Text('连接'),
-          ),
-        ],
       ),
     );
   }

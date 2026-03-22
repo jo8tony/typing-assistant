@@ -15,6 +15,7 @@ class ConnectionStatusWidget extends StatelessWidget {
   Widget build(BuildContext context) {
     Color statusColor;
     IconData statusIcon;
+    Widget? statusIndicator;
 
     switch (connectionModel.status) {
       case ConnectionStatus.connected:
@@ -24,6 +25,14 @@ class ConnectionStatusWidget extends StatelessWidget {
       case ConnectionStatus.connecting:
         statusColor = Colors.orange;
         statusIcon = Icons.sync;
+        statusIndicator = SizedBox(
+          width: 20,
+          height: 20,
+          child: CircularProgressIndicator(
+            strokeWidth: 2,
+            valueColor: AlwaysStoppedAnimation<Color>(statusColor),
+          ),
+        );
         break;
       case ConnectionStatus.error:
         statusColor = Colors.red;
@@ -35,45 +44,70 @@ class ConnectionStatusWidget extends StatelessWidget {
         break;
     }
 
-    return Container(
-      padding: const EdgeInsets.symmetric(
-        horizontal: Constants.paddingNormal,
-        vertical: Constants.paddingSmall,
-      ),
-      decoration: BoxDecoration(
-        color: statusColor.withOpacity(0.1),
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: statusColor.withOpacity(0.3)),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(
-            statusIcon,
-            color: statusColor,
-            size: 24,
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          padding: const EdgeInsets.symmetric(
+            horizontal: Constants.paddingNormal,
+            vertical: Constants.paddingSmall,
           ),
-          const SizedBox(width: 8),
-          Text(
-            '连接状态: ${connectionModel.statusText}',
-            style: TextStyle(
-              fontSize: Constants.fontSizeNormal,
-              color: statusColor,
-              fontWeight: FontWeight.bold,
+          decoration: BoxDecoration(
+            color: statusColor.withOpacity(0.1),
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(color: statusColor.withOpacity(0.3)),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              statusIndicator ?? Icon(
+                statusIcon,
+                color: statusColor,
+                size: 24,
+              ),
+              const SizedBox(width: 8),
+              Text(
+                '连接状态: ${connectionModel.statusText}',
+                style: TextStyle(
+                  fontSize: Constants.fontSizeNormal,
+                  color: statusColor,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              if (connectionModel.isConnected) ...[
+                const SizedBox(width: 8),
+                Text(
+                  '(${connectionModel.computerIp})',
+                  style: TextStyle(
+                    fontSize: Constants.fontSizeSmall,
+                    color: Colors.grey[600],
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ),
+        // 显示错误信息
+        if (connectionModel.status == ConnectionStatus.error &&
+            connectionModel.errorMessage.isNotEmpty) ...[
+          const SizedBox(height: 8),
+          Container(
+            padding: const EdgeInsets.all(Constants.paddingSmall),
+            decoration: BoxDecoration(
+              color: Colors.red.withOpacity(0.05),
+              borderRadius: BorderRadius.circular(4),
             ),
-          ),
-          if (connectionModel.isConnected) ...[
-            const SizedBox(width: 8),
-            Text(
-              '(${connectionModel.computerIp})',
+            child: Text(
+              connectionModel.errorMessage,
               style: TextStyle(
                 fontSize: Constants.fontSizeSmall,
-                color: Colors.grey[600],
+                color: Colors.red[700],
               ),
+              textAlign: TextAlign.center,
             ),
-          ],
+          ),
         ],
-      ),
+      ],
     );
   }
 }
