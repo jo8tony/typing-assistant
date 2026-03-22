@@ -198,6 +198,9 @@ class _HomeScreenState extends State<HomeScreen> {
   void _showConnectionDialog() {
     final ipController = TextEditingController();
     bool isConnecting = false;
+    bool isTesting = false;
+    String? testResult;
+    bool? testSuccess;
     String? savedIp;
 
     // 加载保存的 IP
@@ -213,91 +216,270 @@ class _HomeScreenState extends State<HomeScreen> {
       builder: (context) => StatefulBuilder(
         builder: (context, setDialogState) => AlertDialog(
           title: const Text(
-            '手动连接',
+            '连接设置',
             style: TextStyle(fontSize: Constants.fontSizeLarge),
           ),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Text(
-                '请输入电脑的 IP 地址',
-                style: TextStyle(fontSize: Constants.fontSizeNormal),
-              ),
-              const SizedBox(height: 16),
-              TextField(
-                controller: ipController,
-                keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                enabled: !isConnecting,
-                decoration: InputDecoration(
-                  hintText: '例如: 192.168.1.100',
-                  border: const OutlineInputBorder(),
-                  prefixIcon: const Icon(Icons.computer),
-                  suffixIcon: ipController.text.isNotEmpty
-                      ? IconButton(
-                          icon: const Icon(Icons.clear),
-                          onPressed: isConnecting
-                              ? null
-                              : () {
-                                  ipController.clear();
-                                  setDialogState(() {});
-                                },
-                        )
-                      : null,
+          content: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 400),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // 当前连接状态显示
+                Consumer<WebSocketService>(
+                  builder: (context, service, child) {
+                    final isConnected = service.connectionModel.isConnected;
+                    final currentIp = service.connectionModel.computerIp;
+                    return Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: isConnected ? Colors.green.withOpacity(0.1) : Colors.grey.withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(
+                          color: isConnected ? Colors.green.withOpacity(0.3) : Colors.grey.withOpacity(0.3),
+                        ),
+                      ),
+                      child: Row(
+                        children: [
+                          Icon(
+                            isConnected ? Icons.check_circle : Icons.cloud_off,
+                            color: isConnected ? Colors.green : Colors.grey,
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  isConnected ? '已连接' : '未连接',
+                                  style: TextStyle(
+                                    fontSize: Constants.fontSizeNormal,
+                                    fontWeight: FontWeight.bold,
+                                    color: isConnected ? Colors.green : Colors.grey,
+                                  ),
+                                ),
+                                if (isConnected && currentIp.isNotEmpty)
+                                  Text(
+                                    currentIp,
+                                    style: TextStyle(
+                                      fontSize: Constants.fontSizeSmall,
+                                      color: Colors.grey[600],
+                                    ),
+                                  ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    );
+                  },
                 ),
-                style: const TextStyle(fontSize: Constants.fontSizeNormal),
-                onChanged: (_) => setDialogState(() {}),
-              ),
-              const SizedBox(height: 8),
-              Text(
-                '端口: ${Constants.websocketPort}',
-                style: const TextStyle(
-                  fontSize: Constants.fontSizeSmall,
-                  color: Colors.grey,
-                ),
-              ),
-              if (savedIp != null && savedIp.isNotEmpty) ...[
-                const SizedBox(height: 8),
-                Text(
-                  '上次连接: $savedIp',
+                const SizedBox(height: 16),
+                const Text(
+                  '电脑 IP 地址',
                   style: TextStyle(
-                    fontSize: Constants.fontSizeSmall,
-                    color: Colors.blue[700],
+                    fontSize: Constants.fontSizeNormal,
+                    fontWeight: FontWeight.bold,
                   ),
                 ),
+                const SizedBox(height: 8),
+                TextField(
+                  controller: ipController,
+                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                  enabled: !isConnecting && !isTesting,
+                  decoration: InputDecoration(
+                    hintText: '例如: 192.168.1.100',
+                    border: const OutlineInputBorder(),
+                    prefixIcon: const Icon(Icons.computer),
+                    suffixIcon: ipController.text.isNotEmpty
+                        ? IconButton(
+                            icon: const Icon(Icons.clear),
+                            onPressed: isConnecting || isTesting
+                                ? null
+                                : () {
+                                    ipController.clear();
+                                    setDialogState(() {});
+                                  },
+                          )
+                        : null,
+                  ),
+                  style: const TextStyle(fontSize: Constants.fontSizeNormal),
+                  onChanged: (_) => setDialogState(() {
+                    testResult = null;
+                    testSuccess = null;
+                  }),
+                ),
+                const SizedBox(height: 8),
+                Row(
+                  children: [
+                    Text(
+                      '端口: ${Constants.websocketPort}',
+                      style: const TextStyle(
+                        fontSize: Constants.fontSizeSmall,
+                        color: Colors.grey,
+                      ),
+                    ),
+                    const Spacer(),
+                    // 测试连接按钮
+                    if (ipController.text.isNotEmpty)
+                      TextButton.icon(
+                        onPressed: isConnecting || isTesting
+                            ? null
+                            : () async {
+                                final ip = ipController.text.trim();
+                                // 简单的 IP 格式验证
+                                final ipRegex = RegExp(r'^(\d{1,3}\.){3}\d{1,3}$');
+                                if (!ipRegex.hasMatch(ip)) {
+                                  setDialogState(() {
+                                    testResult = 'IP 地址格式不正确';
+                                    testSuccess = false;
+                                  });
+                                  return;
+                                }
+
+                                setDialogState(() {
+                                  isTesting = true;
+                                  testResult = null;
+                                  testSuccess = null;
+                                });
+
+                                // 测试连接
+                                final success = await wsService.testConnection(
+                                  ip,
+                                  Constants.websocketPort,
+                                );
+
+                                if (mounted) {
+                                  setDialogState(() {
+                                    isTesting = false;
+                                    testSuccess = success;
+                                    testResult = success
+                                        ? '连接测试成功！'
+                                        : (wsService.connectionModel.errorMessage.isNotEmpty
+                                            ? wsService.connectionModel.errorMessage
+                                            : '连接测试失败');
+                                  });
+                                }
+                              },
+                        icon: isTesting
+                            ? const SizedBox(
+                                width: 16,
+                                height: 16,
+                                child: CircularProgressIndicator(strokeWidth: 2),
+                              )
+                            : const Icon(Icons.network_check, size: 18),
+                        label: const Text('测试连接'),
+                      ),
+                  ],
+                ),
+                // 测试结果提示
+                if (testResult != null) ...[
+                  const SizedBox(height: 8),
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: testSuccess == true
+                          ? Colors.green.withOpacity(0.1)
+                          : Colors.red.withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(6),
+                      border: Border.all(
+                        color: testSuccess == true
+                            ? Colors.green.withOpacity(0.3)
+                            : Colors.red.withOpacity(0.3),
+                      ),
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(
+                          testSuccess == true ? Icons.check_circle : Icons.error,
+                          color: testSuccess == true ? Colors.green : Colors.red,
+                          size: 20,
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            testResult!,
+                            style: TextStyle(
+                              fontSize: Constants.fontSizeSmall,
+                              color: testSuccess == true ? Colors.green[700] : Colors.red[700],
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+                if (savedIp != null && savedIp.isNotEmpty) ...[
+                  const SizedBox(height: 12),
+                  Text(
+                    '上次连接: $savedIp',
+                    style: TextStyle(
+                      fontSize: Constants.fontSizeSmall,
+                      color: Colors.blue[700],
+                    ),
+                  ),
+                ],
               ],
-            ],
+            ),
           ),
           actions: [
             TextButton(
-              onPressed: isConnecting ? null : () => Navigator.pop(context),
+              onPressed: isConnecting || isTesting ? null : () => Navigator.pop(context),
               child: const Text('取消'),
             ),
+            // 断开连接按钮
+            Consumer<WebSocketService>(
+              builder: (context, service, child) {
+                final isConnected = service.connectionModel.isConnected;
+                if (!isConnected) return const SizedBox.shrink();
+                return TextButton.icon(
+                  onPressed: isConnecting || isTesting
+                      ? null
+                      : () async {
+                          await wsService.disconnect();
+                          _showSnackBar('已断开连接', isError: false);
+                          setDialogState(() {});
+                        },
+                  icon: const Icon(Icons.link_off, color: Colors.red),
+                  label: const Text(
+                    '断开连接',
+                    style: TextStyle(color: Colors.red),
+                  ),
+                );
+              },
+            ),
+            // 快速连接按钮
             if (savedIp != null && savedIp.isNotEmpty && !isConnecting)
               TextButton(
-                onPressed: () async {
-                  setDialogState(() => isConnecting = true);
+                onPressed: isTesting
+                    ? null
+                    : () async {
+                        setDialogState(() => isConnecting = true);
 
-                  final success = await wsService.connectManually(
-                    savedIp!,
-                    Constants.websocketPort,
-                  );
+                        final success = await wsService.connectManually(
+                          savedIp!,
+                          Constants.websocketPort,
+                        );
 
-                  if (mounted) {
-                    setDialogState(() => isConnecting = false);
+                        if (mounted) {
+                          setDialogState(() => isConnecting = false);
 
-                    if (success) {
-                      Navigator.pop(context);
-                      _showSnackBar('连接成功！', isError: false);
-                    } else {
-                      final errorMsg = wsService.connectionModel.errorMessage;
-                      _showSnackBar(errorMsg.isNotEmpty ? errorMsg : '连接失败');
-                    }
-                  }
-                },
+                          if (success) {
+                            Navigator.pop(context);
+                            _showSnackBar('连接成功！', isError: false);
+                          } else {
+                            final errorMsg = wsService.connectionModel.errorMessage;
+                            _showSnackBar(errorMsg.isNotEmpty ? errorMsg : '连接失败');
+                          }
+                        }
+                      },
                 child: const Text('快速连接'),
               ),
+            // 连接按钮
             ElevatedButton(
-              onPressed: isConnecting
+              onPressed: isConnecting || isTesting
                   ? null
                   : () async {
                       final ip = ipController.text.trim();
@@ -327,7 +509,6 @@ class _HomeScreenState extends State<HomeScreen> {
                           Navigator.pop(context);
                           _showSnackBar('连接成功！', isError: false);
                         } else {
-                          // 显示错误信息，但不关闭对话框
                           final errorMsg = wsService.connectionModel.errorMessage;
                           _showSnackBar(errorMsg.isNotEmpty ? errorMsg : '连接失败');
                         }

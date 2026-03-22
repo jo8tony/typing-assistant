@@ -175,6 +175,78 @@ class WebSocketService extends ChangeNotifier {
     return await connect(computer, autoReconnect: true);
   }
 
+  /// 测试连接（不保存连接状态）
+  Future<bool> testConnection(String ip, int port) async {
+    // 如果已经连接到同一个 IP，直接返回成功
+    if (_connectionModel.isConnected && _connectionModel.computerIp == ip) {
+      print('已经连接到 $ip，测试通过');
+      return true;
+    }
+
+    final wsUrl = 'ws://$ip:$port';
+    print('测试连接到: $wsUrl');
+
+    WebSocketChannel? testChannel;
+    try {
+      testChannel = IOWebSocketChannel.connect(
+        wsUrl,
+        connectTimeout: const Duration(seconds: 5),
+      );
+
+      // 等待连接建立或超时
+      await testChannel.ready.timeout(
+        const Duration(seconds: 5),
+        onTimeout: () {
+          throw TimeoutException('连接超时');
+        },
+      );
+
+      // 发送测试消息
+      final testMessage = {
+        'type': 'ping',
+        'timestamp': DateTime.now().millisecondsSinceEpoch,
+      };
+      testChannel.sink.add(jsonEncode(testMessage));
+
+      // 等待响应（最多3秒）
+      final response = await testChannel.stream
+          .firstWhere(
+            (msg) {
+              try {
+                final data = jsonDecode(msg);
+                return data['type'] == 'pong';
+              } catch (_) {
+                return false;
+              }
+            },
+            orElse: () => null,
+          )
+          .timeout(const Duration(seconds: 3), onTimeout: () => null);
+
+      // 关闭测试连接
+      await testChannel.sink.close();
+
+      if (response != null) {
+        print('连接测试成功');
+        return true;
+      } else {
+        print('连接测试失败：未收到响应');
+        _connectionModel.setError('连接测试失败：服务器无响应');
+        return false;
+      }
+    } on TimeoutException catch (e) {
+      print('连接测试超时: $e');
+      _connectionModel.setError('连接超时，请检查:\n1. IP 地址是否正确\n2. 电脑端服务是否已启动');
+      testChannel?.sink.close();
+      return false;
+    } catch (e) {
+      print('连接测试失败: $e');
+      _connectionModel.setError('连接失败: $e');
+      testChannel?.sink.close();
+      return false;
+    }
+  }
+
   /// 断开连接
   Future<void> disconnect() async {
     _shouldReconnect = false;
