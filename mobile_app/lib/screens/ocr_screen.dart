@@ -35,12 +35,11 @@ class _OcrScreenState extends State<OcrScreen> {
       final block = blocks[i];
       final text = block.text;
 
-      
       for (int j = 0; j < text.length; j++) {
         final char = text[j];
-        
+
         if (char.trim().isEmpty) continue;
-        
+
         characters.add(OcrWordBlock(
           text: char,
           originalIndex: i,
@@ -56,41 +55,22 @@ class _OcrScreenState extends State<OcrScreen> {
   String _getSelectedText() {
     final selectedChars = _wordBlocks.where((w) => w.isSelected).toList();
     if (selectedChars.isEmpty) return '';
-    
+
     selectedChars.sort((a, b) => a.charIndex.compareTo(b.charIndex));
-    
+
     final buffer = StringBuffer();
     for (final char in selectedChars) {
       buffer.write(char.text);
     }
-    
+
     return buffer.toString();
   }
 
-  /// 处理触摸开始
-  int? _lastTouchedIndex;
-  bool? _lastTouchedState;
-
-  void _handleTouchStart(int index) {
-    _lastTouchedIndex = index;
-    _lastTouchedState = !_wordBlocks[index].isSelected;
+  /// 处理字符块点击
+  void _handleWordTap(int index) {
     setState(() {
-      _wordBlocks[index].isSelected = _lastTouchedState!;
+      _wordBlocks[index].isSelected = !_wordBlocks[index].isSelected;
     });
-  }
-
-  void _handleTouchUpdate(int index) {
-    if (index == _lastTouchedIndex) return;
-    
-    _lastTouchedIndex = index;
-    setState(() {
-      _wordBlocks[index].isSelected = _lastTouchedState!;
-    });
-  }
-
-  void _handleTouchEnd() {
-    _lastTouchedIndex = null;
-    _lastTouchedState = null;
   }
 
   void _fillSelectedText() {
@@ -101,7 +81,7 @@ class _OcrScreenState extends State<OcrScreen> {
     }
 
     widget.onSend(selectedText);
-    
+
     if (mounted) {
       Navigator.pop(context);
     }
@@ -151,68 +131,52 @@ class _OcrScreenState extends State<OcrScreen> {
       ),
       body: Column(
         children: [
-          if (selectedCount > 0)
-            Container(
-              padding: const EdgeInsets.symmetric(
-                horizontal: Constants.paddingNormal,
-                vertical: Constants.paddingSmall,
-              ),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(Icons.check_circle, color: Colors.blue[700]),
-                  const SizedBox(width: 8),
-                  Text(
-                    '已选择 $selectedCount 个字符',
-                    style: TextStyle(
-                      fontSize: Constants.fontSizeNormal,
-                      color: Colors.blue[700],
-                      fontWeight: FontWeight.bold,
+          AnimatedContainer(
+            duration: const Duration(milliseconds: 200),
+            height: selectedCount > 0 ? 40 : 0,
+            child: selectedCount > 0
+                ? Container(
+                    alignment: Alignment.center,
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(Icons.check_circle, color: Colors.blue[700], size: 20),
+                        const SizedBox(width: 8),
+                        Text(
+                          '已选择 $selectedCount 个字符',
+                          style: TextStyle(
+                            fontSize: Constants.fontSizeNormal,
+                            color: Colors.blue[700],
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ],
                     ),
-                  ),
-                ],
-              ),
-            ),
-
+                  )
+                : const SizedBox.shrink(),
+          ),
           Expanded(
-            child: GestureDetector(
-              onPanStart: (details) {
-                _handleTouchEnd();
-                final index = _findWordBlockIndex(details.localPosition);
-                if (index != null) {
-                  _handleTouchStart(index);
-                }
-              },
-              onPanUpdate: (details) {
-                final index = _findWordBlockIndex(details.localPosition);
-                if (index != null) {
-                  _handleTouchUpdate(index);
-                }
-              },
-              onPanEnd: (_) => _handleTouchEnd(),
-              child: Container(
-                color: Colors.grey[100],
-                child: SingleChildScrollView(
-                  padding: const EdgeInsets.all(Constants.paddingNormal),
-                  child: Wrap(
-                    spacing: 8,
-                    runSpacing: 8,
-                    children: _wordBlocks.map((word) {
-                      return _buildWordChip(word);
-                    }).toList(),
-                  ),
+            child: Container(
+              color: Colors.grey[100],
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.all(Constants.paddingNormal),
+                child: Wrap(
+                  spacing: 6,
+                  runSpacing: 6,
+                  children: _wordBlocks.asMap().entries.map((entry) {
+                    return _buildWordChip(entry.key, entry.value);
+                  }).toList(),
                 ),
               ),
             ),
           ),
-
           Container(
             padding: const EdgeInsets.all(Constants.paddingNormal),
             decoration: BoxDecoration(
               color: Colors.white,
               boxShadow: [
                 BoxShadow(
-                  color: Colors.black.withOpacity(0.1),
+                  color: Colors.black.withValues(alpha: 0.1),
                   blurRadius: 4,
                   offset: const Offset(0, -2),
                 ),
@@ -241,9 +205,7 @@ class _OcrScreenState extends State<OcrScreen> {
                       ),
                     ),
                   ),
-
                   const SizedBox(width: Constants.paddingNormal),
-
                   Expanded(
                     child: SizedBox(
                       height: Constants.buttonHeight,
@@ -275,69 +237,26 @@ class _OcrScreenState extends State<OcrScreen> {
     );
   }
 
-  int? _findWordBlockIndex(Offset position) {
-    final padding = Constants.paddingNormal;
-    
-    double currentX = padding;
-    double currentY = padding;
-    const maxWidth = 400.0;
-    const itemSpacing = 8.0;
-    const lineSpacing = 8.0;
-    const itemHeight = 40.0;
-    
-    for (int i = 0; i < _wordBlocks.length; i++) {
-      final word = _wordBlocks[i];
-      final textWidth = _calculateTextWidth(word.text);
-      final itemWidth = textWidth + 24;
-      
-      if (currentX + itemWidth > maxWidth) {
-        currentX = padding;
-        currentY += itemHeight + lineSpacing;
-      }
-      
-      final itemRect = Rect.fromLTWH(
-        currentX,
-        currentY,
-        itemWidth,
-        itemHeight,
-      );
-      
-      if (itemRect.contains(position)) {
-        return i;
-      }
-      
-      currentX += itemWidth + itemSpacing;
-    }
-    
-    return null;
-  }
-
-  double _calculateTextWidth(String text) {
-    return text.length * 16.0;
-  }
-
-  Widget _buildWordChip(OcrWordBlock word) {
-    final textWidth = _calculateTextWidth(word.text);
-    
-    return Container(
-      width: textWidth + 24,
-      height: 40,
-      decoration: BoxDecoration(
-        color: word.isSelected ? Colors.blue : Colors.white,
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(
-          color: word.isSelected ? Colors.blue : Colors.grey[300]!,
-          width: 1.5,
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.05),
-            blurRadius: 2,
-            offset: const Offset(0, 1),
+  Widget _buildWordChip(int index, OcrWordBlock word) {
+    return GestureDetector(
+      onTap: () => _handleWordTap(index),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+        decoration: BoxDecoration(
+          color: word.isSelected ? Colors.blue : Colors.white,
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(
+            color: word.isSelected ? Colors.blue : Colors.grey[300]!,
+            width: 1.5,
           ),
-        ],
-      ),
-      child: Center(
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.05),
+              blurRadius: 2,
+              offset: const Offset(0, 1),
+            ),
+          ],
+        ),
         child: Text(
           word.text,
           style: TextStyle(
