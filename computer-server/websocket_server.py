@@ -29,6 +29,17 @@ class TypingServer:
         self.last_heartbeat[websocket] = time.time()
         print(f"新客户端连接: {client_ip}")
         print(f"当前连接数: {len(self.clients)}")
+        
+        # 发送连接成功确认
+        try:
+            response = {
+                'type': 'connected',
+                'message': '连接成功',
+                'timestamp': int(time.time() * 1000),
+            }
+            await websocket.send(json.dumps(response))
+        except Exception as e:
+            print(f"发送连接确认失败: {e}")
     
     async def unregister(self, websocket: WebSocketServerProtocol):
         """注销客户端"""

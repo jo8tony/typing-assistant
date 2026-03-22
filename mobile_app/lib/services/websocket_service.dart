@@ -94,10 +94,9 @@ class WebSocketService extends ChangeNotifier {
       return false;
     }
 
-    // 如果已经连接到同一个地址，直接返回成功
+    // 如果已经连接到同一个 IP 地址，直接返回成功（只比较 IP，不比较 name）
     if (_connectionModel.isConnected &&
-        _connectionModel.computerIp == computer.ip &&
-        _connectionModel.computerName == computer.name) {
+        _connectionModel.computerIp == computer.ip) {
       print('已经连接到 $computer.ip，无需重复连接');
       return true;
     }
@@ -254,8 +253,8 @@ class WebSocketService extends ChangeNotifier {
   /// 处理错误
   void _onError(error) {
     print('WebSocket 错误: $error');
-    // 只有在已连接状态下才设置为错误，避免覆盖正在连接的状态
-    if (_connectionModel.isConnected) {
+    // 在连接中或已连接状态下都处理错误
+    if (_connectionModel.isConnected || _connectionModel.isConnecting) {
       _connectionModel.setError('连接错误: $error');
     }
   }
@@ -263,8 +262,8 @@ class WebSocketService extends ChangeNotifier {
   /// 连接关闭
   void _onDone() {
     print('WebSocket 连接已关闭');
-    // 只有在已连接或错误状态下才设置为断开
-    if (_connectionModel.isConnected || _connectionModel.status == ConnectionStatus.error) {
+    // 在任何非断开状态下都设置为断开
+    if (!_connectionModel.isDisconnected) {
       _connectionModel.setDisconnected();
     }
 

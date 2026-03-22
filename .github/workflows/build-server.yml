@@ -1,0 +1,154 @@
+name: Build Server Package
+
+on:
+  push:
+    branches: [ main, master ]
+    tags:
+      - 'v*'
+  pull_request:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Setup Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
+    
+    - name: Install dependencies
+      working-directory: ./computer-server
+      run: |
+        python -m pip install --upgrade pip
+        pip install pyinstaller
+        pip install -r requirements.txt
+    
+    - name: Build Windows executable
+      working-directory: ./computer-server
+      run: |
+        pyinstaller --onefile --name typing-assistant-server main.py
+      continue-on-error: true
+    
+    - name: Upload Windows build
+      if: success()
+      uses: actions/upload-artifact@v4
+      with:
+        name: typing-assistant-server-windows
+        path: computer-server/dist/
+        retention-days: 30
+
+  build-macos:
+    runs-on: macos-latest
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Setup Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
+    
+    - name: Install dependencies
+      working-directory: ./computer-server
+      run: |
+        python -m pip install --upgrade pip
+        pip install pyinstaller
+        pip install -r requirements.txt
+    
+    - name: Build macOS executable
+      working-directory: ./computer-server
+      run: |
+        pyinstaller --onefile --name typing-assistant-server main.py
+      continue-on-error: true
+    
+    - name: Upload macOS build
+      if: success()
+      uses: actions/upload-artifact@v4
+      with:
+        name: typing-assistant-server-macos
+        path: computer-server/dist/
+        retention-days: 30
+
+  build-linux:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Setup Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
+    
+    - name: Install dependencies
+      working-directory: ./computer-server
+      run: |
+        python -m pip install --upgrade pip
+        pip install pyinstaller
+        pip install -r requirements.txt
+    
+    - name: Build Linux executable
+      working-directory: ./computer-server
+      run: |
+        pyinstaller --onefile --name typing-assistant-server main.py
+      continue-on-error: true
+    
+    - name: Upload Linux build
+      if: success()
+      uses: actions/upload-artifact@v4
+      with:
+        name: typing-assistant-server-linux
+        path: computer-server/dist/
+        retention-days: 30
+
+  create-source-package:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Create source package
+      run: |
+        mkdir -p release/computer-server
+        cp -r computer-server/* release/computer-server/
+        cp README.md release/
+        cd release && zip -r ../typing-assistant-server-source.zip .
+    
+    - name: Upload source package
+      uses: actions/upload-artifact@v4
+      with:
+        name: typing-assistant-server-source
+        path: typing-assistant-server-source.zip
+        retention-days: 30
+
+  release-server:
+    needs: [build-windows, build-macos, build-linux, create-source-package]
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/v')
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Download all artifacts
+      uses: actions/download-artifact@v4
+      with:
+        path: ./artifacts
+    
+    - name: Create Release
+      uses: softprops/action-gh-release@v1
+      with:
+        files: |
+          ./artifacts/typing-assistant-server-windows/**/*
+          ./artifacts/typing-assistant-server-macos/**/*
+          ./artifacts/typing-assistant-server-linux/**/*
+          ./artifacts/typing-assistant-server-source/*.zip
+        generate_release_notes: true
+        draft: false
+        prerelease: ${{ contains(github.ref, '-alpha') || contains(github.ref, '-beta') || contains(github.ref, '-rc') }}
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

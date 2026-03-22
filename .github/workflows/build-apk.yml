@@ -3,60 +3,106 @@ name: Build APK
 on:
   push:
     branches: [ main, master ]
+    tags:
+      - 'v*'
   pull_request:
     branches: [ main, master ]
   workflow_dispatch:
+    inputs:
+      version:
+        description: '版本号 (例如: 1.0.1)'
+        required: false
+        default: ''
 
 jobs:
   build:
     runs-on: ubuntu-latest
     env:
       FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
-    
+
     steps:
     - uses: actions/checkout@v4
-    
+
     - name: Setup Flutter
       uses: subosito/flutter-action@v2
       with:
         flutter-version: '3.16.0'
         channel: 'stable'
-    
+
     - name: Create necessary Android files
       working-directory: ./mobile_app
       run: |
         # Create android/local.properties
         mkdir -p android
         echo "flutter.sdk=${FLUTTER_ROOT}" > android/local.properties
-        echo "flutter.versionCode=1" >> android/local.properties
-        echo "flutter.versionName=1.0.0" >> android/local.properties
-        
+
+        # 设置版本号
+        if [ "${{ github.event.inputs.version }}" != "" ]; then
+          echo "flutter.versionCode=${{ github.run_number }}" >> android/local.properties
+          echo "flutter.versionName=${{ github.event.inputs.version }}" >> android/local.properties
+        else
+          echo "flutter.versionCode=${{ github.run_number }}" >> android/local.properties
+          echo "flutter.versionName=1.0.0" >> android/local.properties
+        fi
+
         # Create gradle wrapper
         flutter create --platforms android .
-    
+
     - name: Install dependencies
       working-directory: ./mobile_app
       run: flutter pub get
-    
+
+    - name: Analyze code
+      working-directory: ./mobile_app
+      run: flutter analyze --no-fatal-infos
+
+    - name: Run tests
+      working-directory: ./mobile_app
+      run: flutter test || true
+
     - name: Build APK
       working-directory: ./mobile_app
       run: flutter build apk --release
-    
+
+    - name: Build App Bundle (AAB)
+      working-directory: ./mobile_app
+      run: flutter build appbundle --release || true
+
     - name: Upload APK
       uses: actions/upload-artifact@v4
       with:
-        name: typing-assistant-apk
+        name: typing-assistant-apk-${{ github.run_number }}
         path: mobile_app/build/app/outputs/flutter-apk/app-release.apk
-    
-    # 暂时禁用自动 Release，因为权限问题
-    # - name: Create Release
-    #   if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    #   uses: softprops/action-gh-release@v1
-    #   with:
-    #     files: mobile_app/build/app/outputs/flutter-apk/app-release.apk
-    #     tag_name: v${{ github.run_number }}
-    #     name: Release v${{ github.run_number }}
-    #     draft: false
-    #     prerelease: false
-    #   env:
-    #     GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        retention-days: 30
+
+    - name: Upload App Bundle
+      if: success()
+      uses: actions/upload-artifact@v4
+      with:
+        name: typing-assistant-aab-${{ github.run_number }}
+        path: mobile_app/build/app/outputs/bundle/release/app-release.aab
+        retention-days: 30
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/v')
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Download APK
+      uses: actions/download-artifact@v4
+      with:
+        name: typing-assistant-apk-${{ github.run_number }}
+        path: ./artifacts
+
+    - name: Create Release
+      uses: softprops/action-gh-release@v1
+      with:
+        files: ./artifacts/app-release.apk
+        generate_release_notes: true
+        draft: false
+        prerelease: ${{ contains(github.ref, '-alpha') || contains(github.ref, '-beta') || contains(github.ref, '-rc') }}
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

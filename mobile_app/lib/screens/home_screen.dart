@@ -47,9 +47,19 @@ class _HomeScreenState extends State<HomeScreen> {
     _discoveryService.computersStream.listen((computers) {
       if (computers.isNotEmpty) {
         final wsService = context.read<WebSocketService>();
-        if (!wsService.connectionModel.isConnected) {
-          // 自动连接到第一个发现的电脑
-          wsService.connect(computers.first);
+        // 只有在未连接且未在连接中时才自动连接
+        if (!wsService.connectionModel.isConnected &&
+            !wsService.connectionModel.isConnecting) {
+          // 检查是否已经手动连接过这个 IP
+          final savedIp = wsService.connectionModel.computerIp;
+          final matchingComputer = computers.cast<DiscoveredComputer?>().firstWhere(
+            (c) => c!.ip == savedIp,
+            orElse: () => null,
+          );
+          // 如果当前保存的 IP 在发现的列表中，或者没有保存的 IP，才自动连接
+          if (savedIp.isEmpty || matchingComputer != null) {
+            wsService.connect(computers.first);
+          }
         }
       }
     });
