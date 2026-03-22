@@ -23,17 +23,16 @@ jobs:
         channel: 'stable'
     
     - name: Create necessary Android files
-      working-directory: ./mobile_app/android
+      working-directory: ./mobile_app
       run: |
-        # Create local.properties
-        echo "flutter.sdk=${{ env.FLUTTER_ROOT }}" > local.properties
-        echo "flutter.versionCode=1" >> local.properties
-        echo "flutter.versionName=1.0.0" >> local.properties
+        # Create android/local.properties
+        mkdir -p android
+        echo "flutter.sdk=${FLUTTER_ROOT}" > android/local.properties
+        echo "flutter.versionCode=1" >> android/local.properties
+        echo "flutter.versionName=1.0.0" >> android/local.properties
         
-        # Create gradle wrapper if not exists
-        if [ ! -f gradlew ]; then
-          flutter create --platforms android .
-        fi
+        # Create gradle wrapper
+        flutter create --platforms android .
     
     - name: Install dependencies
       working-directory: ./mobile_app
