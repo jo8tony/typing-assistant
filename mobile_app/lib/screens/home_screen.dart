@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:permission_handler/permission_handler.dart';
@@ -130,7 +131,8 @@ class _HomeScreenState extends State<HomeScreen> {
     );
 
     try {
-      final blocks = await _ocrService.recognizeText(imagePath as dynamic);
+      final file = File(imagePath);
+      final blocks = await _ocrService.recognizeText(file);
 
       Navigator.pop(context); // 关闭加载对话框
 
