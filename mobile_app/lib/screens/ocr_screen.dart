@@ -162,10 +162,9 @@ class _OcrScreenState extends State<OcrScreen> {
       return;
     }
 
-    widget.onSend(selectedText);
-
+    // 先关闭页面，再回调，避免页面切换时的视觉异常
     if (mounted) {
-      Navigator.pop(context);
+      Navigator.pop(context, selectedText);
     }
   }
 

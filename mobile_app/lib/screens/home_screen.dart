@@ -411,19 +411,21 @@ class _HomeScreenState extends State<HomeScreen> {
       }
 
       if (!mounted) return;
-      await Navigator.push(
+      // 使用 await 获取 OCR 屏幕返回的结果
+      final result = await Navigator.push(
         context,
         MaterialPageRoute(
           builder: (context) => OcrScreen(
             textBlocks: blocks,
-            onSend: (selectedText) {
-              // 将选中的文字追加到输入框（直接追加，不换行）
-              final currentText = _textController.text;
-              _textController.text = currentText + selectedText;
-            },
+            onSend: (_) {}, // 通过 Navigator.pop 返回结果，此回调不再使用
           ),
         ),
       );
+      // 在 OCR 屏幕完全关闭后再更新输入框，避免闪动问题
+      if (result != null && result is String && mounted) {
+        final currentText = _textController.text;
+        _textController.text = currentText + result;
+      }
     } on PlatformException catch (e) {
       debugPrint('OCR 平台异常: ${e.code} - ${e.message}');
       debugPrint('详细信息: ${e.details}');
