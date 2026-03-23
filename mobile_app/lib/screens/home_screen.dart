@@ -752,9 +752,22 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text(
-          '跨设备打字助手',
-          style: TextStyle(fontSize: Constants.fontSizeLarge),
+        title: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Consumer<WebSocketService>(
+              builder: (context, wsService, child) {
+                return ConnectionStatusWidget(
+                  connectionModel: wsService.connectionModel,
+                );
+              },
+            ),
+            const SizedBox(width: 8),
+            const Text(
+              '跨设备打字助手',
+              style: TextStyle(fontSize: Constants.fontSizeLarge),
+            ),
+          ],
         ),
         centerTitle: true,
         actions: [
@@ -776,19 +789,6 @@ class _HomeScreenState extends State<HomeScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              // 连接状态
-              Consumer<WebSocketService>(
-                builder: (context, wsService, child) {
-                  return Center(
-                    child: ConnectionStatusWidget(
-                      connectionModel: wsService.connectionModel,
-                    ),
-                  );
-                },
-              ),
-
-              const SizedBox(height: Constants.paddingNormal),
-
               // 文字输入区域 - 使用 Flexible 而不是 Expanded，避免键盘弹出时被压缩
               Flexible(
                 flex: 3,
