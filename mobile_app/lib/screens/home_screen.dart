@@ -729,16 +729,17 @@ class _HomeScreenState extends State<HomeScreen> {
                         Constants.websocketPort,
                       );
 
+                      // 先重置状态，再判断是否关闭对话框
                       if (mounted) {
                         setDialogState(() => isConnecting = false);
+                      }
 
-                        if (success) {
-                          Navigator.pop(context);
-                          _showSnackBar('连接成功！', isError: false);
-                        } else {
-                          final errorMsg = wsService.connectionModel.errorMessage;
-                          _showSnackBar(errorMsg.isNotEmpty ? errorMsg : '连接失败');
-                        }
+                      if (success && mounted) {
+                        Navigator.pop(context);
+                        _showSnackBar('连接成功！', isError: false);
+                      } else if (mounted) {
+                        final errorMsg = wsService.connectionModel.errorMessage;
+                        _showSnackBar(errorMsg.isNotEmpty ? errorMsg : '连接失败');
                       }
                     },
               icon: isConnecting

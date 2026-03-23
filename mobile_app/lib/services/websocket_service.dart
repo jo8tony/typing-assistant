@@ -118,7 +118,7 @@ class WebSocketService extends ChangeNotifier {
         connectTimeout: const Duration(seconds: 5),
       );
 
-      // 等待连接建立或超时
+      // 等待连接建立或超时（使用独立的 timeout 确保不会永远等待）
       await _channel!.ready.timeout(
         const Duration(seconds: 5),
         onTimeout: () {
@@ -134,8 +134,20 @@ class WebSocketService extends ChangeNotifier {
         cancelOnError: false,
       );
 
-      // 保存连接信息
-      await _saveConnection(computer.ip, computer.port);
+      // 短暂延迟，确保连接稳定（避免立即断开的情况）
+      await Future.delayed(const Duration(milliseconds: 100));
+
+      // 保存连接信息（使用 timeout 防止卡住）
+      try {
+        await _saveConnection(computer.ip, computer.port).timeout(
+          const Duration(seconds: 2),
+          onTimeout: () {
+            debugPrint('保存连接信息超时，继续执行');
+          },
+        );
+      } catch (e) {
+        debugPrint('保存连接信息失败，继续执行: $e');
+      }
 
       _connectionModel.setConnected(computer.ip, computer.name);
 
@@ -258,7 +270,13 @@ debugPrint('连接测试失败: $e');
 
     if (_channel != null) {
       try {
-        await _channel!.sink.close();
+        // 使用 timeout 防止关闭连接时卡住
+        await _channel!.sink.close().timeout(
+          const Duration(seconds: 2),
+          onTimeout: () {
+            debugPrint('关闭连接超时');
+          },
+        );
       } catch (e) {
         debugPrint('关闭连接时出错: $e');
       }
