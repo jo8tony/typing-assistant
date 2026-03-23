@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -28,6 +29,8 @@ class _HomeScreenState extends State<HomeScreen> {
   bool _isSending = false;
   bool _hasAutoConnected = false; // 标记是否已经尝试过自动连接
   bool _isShowingServerList = false; // 标记是否正在显示服务器列表
+  Timer? _discoveryTimer; // 延迟检测定时器
+  List<DiscoveredComputer> _lastDiscoveredComputers = []; // 上次检测到的服务列表
 
   @override
   void initState() {
@@ -138,24 +141,51 @@ class _HomeScreenState extends State<HomeScreen> {
       // 如果已经自动连接过，不再处理
       if (_hasAutoConnected) return;
 
+      // 更新检测到的服务列表
+      _lastDiscoveredComputers = computers;
+
+      // 取消之前的定时器（如果有）
+      _discoveryTimer?.cancel();
+
       if (computers.isEmpty) {
         // 没有发现服务，不处理
         return;
       }
 
-      // 标记已经尝试过自动连接
-      _hasAutoConnected = true;
+      // 延迟 2 秒后再决定是否连接，确保检测到所有服务
+      _discoveryTimer = Timer(const Duration(seconds: 2), () {
+        if (!mounted) return;
 
-      if (computers.length == 1) {
-        // 只有一个服务，自动连接
-        debugPrint('发现唯一服务，自动连接: ${computers.first.ip}');
-        wsService.connect(computers.first, autoReconnect: true);
-        _showSnackBar('已自动连接到 ${computers.first.name}', isError: false);
-      } else {
-        // 多个服务，显示选择对话框
-        debugPrint('发现多个服务，显示选择对话框: ${computers.length} 个');
-        _showServerSelectionDialog(computers);
-      }
+        // 如果已经连接或正在连接，不处理
+        if (wsService.connectionModel.isConnected ||
+            wsService.connectionModel.isConnecting) {
+          return;
+        }
+
+        // 如果已经自动连接过，不再处理
+        if (_hasAutoConnected) return;
+
+        // 标记已经尝试过自动连接
+        _hasAutoConnected = true;
+
+        // 使用最新的检测结果
+        final currentComputers = _lastDiscoveredComputers;
+
+        if (currentComputers.isEmpty) {
+          return;
+        }
+
+        if (currentComputers.length == 1) {
+          // 只有一个服务，自动连接
+          debugPrint('发现唯一服务，自动连接: ${currentComputers.first.ip}');
+          wsService.connect(currentComputers.first, autoReconnect: true);
+          _showSnackBar('已自动连接到 ${currentComputers.first.name}', isError: false);
+        } else {
+          // 多个服务，显示选择对话框
+          debugPrint('发现多个服务，显示选择对话框: ${currentComputers.length} 个');
+          _showServerSelectionDialog(currentComputers);
+        }
+      });
     });
   }
 
@@ -521,6 +551,154 @@ class _HomeScreenState extends State<HomeScreen> {
     ).then((_) {
       _isShowingServerList = false;
     });
+  }
+
+  /// 显示服务端列表弹窗（点击状态按钮后弹出）
+  void _showServerListPopup() {
+    // 重置自动连接标记，允许重新扫描
+    _hasAutoConnected = false;
+
+    showDialog(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) {
+          return AlertDialog(
+            title: Row(
+              children: [
+                const Expanded(child: Text('局域网服务端')),
+                // 扫描按钮
+                IconButton(
+                  icon: const Icon(Icons.refresh),
+                  tooltip: '重新扫描',
+                  onPressed: () {
+                    // 重新启动发现服务
+                    _discoveryService.restartDiscovery();
+                    setDialogState(() {});
+                    _showSnackBar('正在扫描局域网...', isError: false);
+                  },
+                ),
+                IconButton(
+                  icon: const Icon(Icons.close),
+                  onPressed: () => Navigator.pop(context),
+                ),
+              ],
+            ),
+            content: SizedBox(
+              width: double.maxFinite,
+              height: 400,
+              child: StreamBuilder<List<DiscoveredComputer>>(
+                stream: _discoveryService.computersStream,
+                initialData: _discoveryService.discoveredComputers,
+                builder: (context, snapshot) {
+                  final computers = snapshot.data ?? [];
+                  final wsService = context.read<WebSocketService>();
+                  final currentIp = wsService.connectionModel.computerIp;
+
+                  if (computers.isEmpty) {
+                    return const Center(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          CircularProgressIndicator(),
+                          SizedBox(height: 16),
+                          Text('正在扫描局域网中的服务端...'),
+                        ],
+                      ),
+                    );
+                  }
+
+                  return Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('发现 ${computers.length} 台电脑：'),
+                      const SizedBox(height: 8),
+                      Expanded(
+                        child: ListView.builder(
+                          itemCount: computers.length,
+                          itemBuilder: (context, index) {
+                            final computer = computers[index];
+                            final isCurrent = computer.ip == currentIp &&
+                                wsService.connectionModel.isConnected;
+
+                            return Card(
+                              color: isCurrent
+                                  ? Colors.green.withOpacity(0.1)
+                                  : null,
+                              child: ListTile(
+                                leading: Icon(
+                                  computer.platform == 'macos'
+                                      ? Icons.apple
+                                      : Icons.computer,
+                                  color: isCurrent ? Colors.green : null,
+                                ),
+                                title: Text(computer.name),
+                                subtitle: Text(computer.ip),
+                                trailing: isCurrent
+                                    ? const Chip(
+                                        label: Text('当前'),
+                                        backgroundColor: Colors.green,
+                                        labelStyle:
+                                            TextStyle(color: Colors.white),
+                                      )
+                                    : ElevatedButton(
+                                        onPressed: () async {
+                                          // 先断开当前连接
+                                          if (wsService
+                                              .connectionModel.isConnected) {
+                                            await wsService.disconnect();
+                                          }
+
+                                          // 连接到新服务端
+                                          final success = await wsService.connect(
+                                            computer,
+                                            autoReconnect: true,
+                                          );
+
+                                          if (success && mounted) {
+                                            Navigator.pop(context);
+                                            _showSnackBar(
+                                              '已切换到 ${computer.name}',
+                                              isError: false,
+                                            );
+                                          } else if (mounted) {
+                                            final errorMsg = wsService
+                                                .connectionModel.errorMessage;
+                                            _showSnackBar(errorMsg.isNotEmpty
+                                                ? errorMsg
+                                                : '连接失败');
+                                          }
+                                        },
+                                        child: const Text('切换'),
+                                      ),
+                              ),
+                            );
+                          },
+                        ),
+                      ),
+                    ],
+                  );
+                },
+              ),
+            ),
+            actions: [
+              TextButton.icon(
+                onPressed: () {
+                  _discoveryService.restartDiscovery();
+                  setDialogState(() {});
+                  _showSnackBar('正在扫描局域网...', isError: false);
+                },
+                icon: const Icon(Icons.refresh),
+                label: const Text('重新扫描'),
+              ),
+              ElevatedButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('关闭'),
+              ),
+            ],
+          );
+        },
+      ),
+    );
   }
 
   /// 显示连接对话框
@@ -916,6 +1094,7 @@ class _HomeScreenState extends State<HomeScreen> {
               builder: (context, wsService, child) {
                 return ConnectionStatusWidget(
                   connectionModel: wsService.connectionModel,
+                  onTap: _showServerListPopup,
                 );
               },
             ),

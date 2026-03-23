@@ -4,10 +4,12 @@ import '../models/connection_model.dart';
 /// 连接状态指示器（小型化设计）
 class ConnectionStatusWidget extends StatelessWidget {
   final ConnectionModel connectionModel;
+  final VoidCallback? onTap;
 
   const ConnectionStatusWidget({
     super.key,
     required this.connectionModel,
+    this.onTap,
   });
 
   @override
@@ -39,8 +41,8 @@ class ConnectionStatusWidget extends StatelessWidget {
       case ConnectionStatus.error:
         statusColor = Colors.red;
         statusIcon = Icons.error;
-        tooltip = connectionModel.errorMessage.isNotEmpty 
-            ? connectionModel.errorMessage 
+        tooltip = connectionModel.errorMessage.isNotEmpty
+            ? connectionModel.errorMessage
             : '连接错误';
         break;
       case ConnectionStatus.disconnected:
@@ -50,7 +52,7 @@ class ConnectionStatusWidget extends StatelessWidget {
         break;
     }
 
-    return Tooltip(
+    Widget statusWidget = Tooltip(
       message: tooltip,
       child: Container(
         padding: const EdgeInsets.all(4),
@@ -66,5 +68,14 @@ class ConnectionStatusWidget extends StatelessWidget {
         ),
       ),
     );
+
+    if (onTap != null) {
+      return GestureDetector(
+        onTap: onTap,
+        child: statusWidget,
+      );
+    }
+
+    return statusWidget;
   }
 }

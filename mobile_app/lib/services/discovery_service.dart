@@ -57,6 +57,13 @@ class DiscoveryService {
     _discoveredComputers.clear();
   }
 
+  /// 重新启动发现服务（用于刷新扫描）
+  Future<void> restartDiscovery() async {
+    _discoveredComputers.clear();
+    _computersController.add([]);
+    await startDiscovery();
+  }
+
   /// 搜索服务
   Future<void> _searchServices() async {
     if (_client == null) return;
