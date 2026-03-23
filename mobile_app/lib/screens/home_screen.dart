@@ -567,7 +567,12 @@ class _HomeScreenState extends State<HomeScreen> {
           return AlertDialog(
             title: Row(
               children: [
-                const Expanded(child: Text('局域网服务端')),
+                const Expanded(
+                  child: Text(
+                    '局域网服务端',
+                    style: TextStyle(fontSize: 18),
+                  ),
+                ),
                 // 扫描按钮
                 IconButton(
                   icon: const Icon(Icons.refresh),
@@ -605,7 +610,10 @@ class _HomeScreenState extends State<HomeScreen> {
                         children: [
                           CircularProgressIndicator(),
                           SizedBox(height: 16),
-                          Text('正在扫描局域网中的服务端...'),
+                          Text(
+                            '正在扫描局域网中的服务端...',
+                            style: TextStyle(fontSize: 14),
+                          ),
                           SizedBox(height: 8),
                           Text(
                             '这可能需要几秒钟',
@@ -624,29 +632,37 @@ class _HomeScreenState extends State<HomeScreen> {
                         children: [
                           const Icon(Icons.computer, size: 48, color: Colors.grey),
                           const SizedBox(height: 16),
-                          const Text('未发现局域网服务端'),
+                          const Text(
+                            '未发现局域网服务端',
+                            style: TextStyle(fontSize: 16),
+                          ),
                           const SizedBox(height: 8),
                           const Text(
-                            '请确保电脑端服务已启动，\n且手机和电脑在同一网络',
+                            '请确保电脑端服务已启动，且手机和电脑在同一网络',
                             textAlign: TextAlign.center,
                             style: TextStyle(fontSize: 12, color: Colors.grey),
                           ),
                           const SizedBox(height: 16),
-                          ElevatedButton.icon(
-                            onPressed: () {
-                              _discoveryService.restartDiscovery();
-                              setDialogState(() {});
-                            },
-                            icon: const Icon(Icons.refresh),
-                            label: const Text('重新扫描'),
-                          ),
-                          const SizedBox(height: 8),
-                          TextButton(
-                            onPressed: () {
-                              Navigator.pop(context);
-                              _showConnectionDialog();
-                            },
-                            child: const Text('手动输入 IP 连接'),
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              ElevatedButton.icon(
+                                onPressed: () {
+                                  _discoveryService.restartDiscovery();
+                                  setDialogState(() {});
+                                },
+                                icon: const Icon(Icons.refresh, size: 18),
+                                label: const Text('重新扫描'),
+                              ),
+                              const SizedBox(width: 12),
+                              OutlinedButton(
+                                onPressed: () {
+                                  Navigator.pop(context);
+                                  _showConnectionDialog();
+                                },
+                                child: const Text('手动输入'),
+                              ),
+                            ],
                           ),
                         ],
                       ),
@@ -658,8 +674,12 @@ class _HomeScreenState extends State<HomeScreen> {
                     children: [
                       Row(
                         children: [
-                          Text('发现 ${computers.length} 台电脑：'),
-                          const Spacer(),
+                          Expanded(
+                            child: Text(
+                              '发现 ${computers.length} 台电脑：',
+                              style: const TextStyle(fontSize: 14),
+                            ),
+                          ),
                           if (isScanning)
                             const SizedBox(
                               width: 16,
@@ -688,14 +708,20 @@ class _HomeScreenState extends State<HomeScreen> {
                                       : Icons.computer,
                                   color: isCurrent ? Colors.green : null,
                                 ),
-                                title: Text(computer.name),
-                                subtitle: Text(computer.ip),
+                                title: Text(
+                                  computer.name,
+                                  style: const TextStyle(fontSize: 14),
+                                ),
+                                subtitle: Text(
+                                  computer.ip,
+                                  style: const TextStyle(fontSize: 12),
+                                ),
                                 trailing: isCurrent
                                     ? const Chip(
                                         label: Text('当前'),
                                         backgroundColor: Colors.green,
                                         labelStyle:
-                                            TextStyle(color: Colors.white),
+                                            TextStyle(color: Colors.white, fontSize: 12),
                                       )
                                     : ElevatedButton(
                                         onPressed: () async {
@@ -738,25 +764,27 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
             ),
             actions: [
-              TextButton(
-                onPressed: () {
-                  Navigator.pop(context);
-                  _showConnectionDialog();
-                },
-                child: const Text('手动输入'),
-              ),
-              TextButton.icon(
-                onPressed: () {
-                  _discoveryService.restartDiscovery();
-                  setDialogState(() {});
-                  _showSnackBar('正在扫描局域网...', isError: false);
-                },
-                icon: const Icon(Icons.refresh),
-                label: const Text('重新扫描'),
-              ),
-              ElevatedButton(
-                onPressed: () => Navigator.pop(context),
-                child: const Text('关闭'),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  OutlinedButton(
+                    onPressed: () {
+                      Navigator.pop(context);
+                      _showConnectionDialog();
+                    },
+                    child: const Text('手动输入'),
+                  ),
+                  const SizedBox(width: 8),
+                  ElevatedButton.icon(
+                    onPressed: () {
+                      _discoveryService.restartDiscovery();
+                      setDialogState(() {});
+                      _showSnackBar('正在扫描局域网...', isError: false);
+                    },
+                    icon: const Icon(Icons.refresh, size: 18),
+                    label: const Text('重新扫描'),
+                  ),
+                ],
               ),
             ],
           );
