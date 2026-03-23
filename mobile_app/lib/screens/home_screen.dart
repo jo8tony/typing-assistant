@@ -63,6 +63,7 @@ class _HomeScreenState extends State<HomeScreen> {
         ),
         content: SizedBox(
           width: double.maxFinite,
+          height: 320, // 固定高度，约可显示8行
           child: Consumer<TextHistoryService>(
             builder: (context, service, child) {
               if (service.isLoading) {
@@ -76,7 +77,6 @@ class _HomeScreenState extends State<HomeScreen> {
               }
               
               return ListView.separated(
-                shrinkWrap: true,
                 itemCount: service.history.length,
                 separatorBuilder: (context, index) => const Divider(height: 1),
                 itemBuilder: (context, index) {
@@ -111,13 +111,8 @@ class _HomeScreenState extends State<HomeScreen> {
           TextButton(
             onPressed: () {
               historyService.clearHistory();
-              Navigator.pop(context);
             },
             child: const Text('清空历史'),
-          ),
-          ElevatedButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('关闭'),
           ),
         ],
       ),
@@ -1028,47 +1023,62 @@ class _HomeScreenState extends State<HomeScreen> {
                     border: Border.all(color: Colors.grey),
                     borderRadius: BorderRadius.circular(12),
                   ),
-                  child: TextField(
-                    controller: _textController,
-                    maxLines: null,
-                    expands: true,
-                    textAlignVertical: TextAlignVertical.top,
-                    style: const TextStyle(
-                      fontSize: Constants.fontSizeLarge,
-                    ),
-                    decoration: InputDecoration(
-                      hintText: '点击此处手写或输入文字...',
-                      hintStyle: const TextStyle(
-                        fontSize: Constants.fontSizeLarge,
-                        color: Colors.grey,
+                  child: Stack(
+                    children: [
+                      // 文本输入框
+                      TextField(
+                        controller: _textController,
+                        maxLines: null,
+                        expands: true,
+                        textAlignVertical: TextAlignVertical.top,
+                        style: const TextStyle(
+                          fontSize: Constants.fontSizeLarge,
+                        ),
+                        decoration: InputDecoration(
+                          hintText: '点击此处手写或输入文字...',
+                          hintStyle: const TextStyle(
+                            fontSize: Constants.fontSizeLarge,
+                            color: Colors.grey,
+                          ),
+                          // 为右上角按钮留出空间，右侧增加padding
+                          contentPadding: const EdgeInsets.fromLTRB(
+                            Constants.paddingNormal, 
+                            Constants.paddingNormal, 
+                            48, // 右侧留出空间给清空按钮
+                            Constants.paddingNormal,
+                          ),
+                          border: InputBorder.none,
+                        ),
                       ),
-                      contentPadding: const EdgeInsets.all(Constants.paddingNormal),
-                      border: InputBorder.none,
-                      suffixIcon: ValueListenableBuilder<TextEditingValue>(
-                        valueListenable: _textController,
-                        builder: (context, value, child) {
-                          if (value.text.isEmpty) {
-                            return const SizedBox.shrink();
-                          }
-                          return GestureDetector(
-                            onTap: () => _textController.clear(),
-                            child: Container(
-                              margin: const EdgeInsets.all(8),
-                              padding: const EdgeInsets.all(4),
-                              decoration: BoxDecoration(
-                                color: Colors.grey[300],
-                                shape: BoxShape.circle,
+                      // 右上角清空按钮
+                      Positioned(
+                        top: 8,
+                        right: 8,
+                        child: ValueListenableBuilder<TextEditingValue>(
+                          valueListenable: _textController,
+                          builder: (context, value, child) {
+                            if (value.text.isEmpty) {
+                              return const SizedBox.shrink();
+                            }
+                            return GestureDetector(
+                              onTap: () => _textController.clear(),
+                              child: Container(
+                                padding: const EdgeInsets.all(4),
+                                decoration: BoxDecoration(
+                                  color: Colors.grey[300],
+                                  shape: BoxShape.circle,
+                                ),
+                                child: Icon(
+                                  Icons.close,
+                                  size: 16,
+                                  color: Colors.grey[700],
+                                ),
                               ),
-                              child: Icon(
-                                Icons.close,
-                                size: 16,
-                                color: Colors.grey[700],
-                              ),
-                            ),
-                          );
-                        },
+                            );
+                          },
+                        ),
                       ),
-                    ),
+                    ],
                   ),
                 ),
               ),
