@@ -87,17 +87,20 @@ class WebSocketService extends ChangeNotifier {
 
   /// 连接到指定的电脑
   Future<bool> connect(DiscoveredComputer computer, {bool autoReconnect = true}) async {
-    // 防止重复连接
-    if (_isConnecting) {
-      debugPrint('正在连接中，忽略重复请求');
-      return false;
-    }
-
     // 如果已经连接到同一个 IP 地址，直接返回成功（只比较 IP，不比较 name）
     if (_connectionModel.isConnected &&
         _connectionModel.computerIp == computer.ip) {
       debugPrint('已经连接到 $computer.ip，无需重复连接');
       return true;
+    }
+
+    // 如果正在连接中，但尝试连接的是不同的 IP，则取消当前连接并重置状态
+    if (_isConnecting) {
+      debugPrint('正在连接中，但请求连接新 IP ${computer.ip}，取消当前连接');
+      _reconnectTimer?.cancel();
+      _shouldReconnect = false;
+      _isConnecting = false;
+      await disconnect();
     }
 
     _isConnecting = true;

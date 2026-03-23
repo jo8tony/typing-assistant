@@ -94,7 +94,13 @@ class _HomeScreenState extends State<HomeScreen> {
                       },
                     ),
                     onTap: () {
-                      _textController.text = text;
+                      // 将选中的历史记录追加到输入框
+                      final currentText = _textController.text;
+                      if (currentText.isNotEmpty) {
+                        _textController.text = '$currentText\n$text';
+                      } else {
+                        _textController.text = text;
+                      }
                       Navigator.pop(context);
                     },
                   );
@@ -374,8 +380,13 @@ class _HomeScreenState extends State<HomeScreen> {
           builder: (context) => OcrScreen(
             textBlocks: blocks,
             onSend: (selectedText) {
-              // 将选中的文字填充到输入框
-              _textController.text = selectedText;
+              // 将选中的文字追加到输入框
+              final currentText = _textController.text;
+              if (currentText.isNotEmpty) {
+                _textController.text = '$currentText\n$selectedText';
+              } else {
+                _textController.text = selectedText;
+              }
             },
           ),
         ),
@@ -797,23 +808,55 @@ class _HomeScreenState extends State<HomeScreen> {
                     border: Border.all(color: Colors.grey),
                     borderRadius: BorderRadius.circular(12),
                   ),
-                  child: TextField(
-                    controller: _textController,
-                    maxLines: null,
-                    expands: true,
-                    textAlignVertical: TextAlignVertical.top,
-                    style: const TextStyle(
-                      fontSize: Constants.fontSizeLarge,
-                    ),
-                    decoration: const InputDecoration(
-                      hintText: '点击此处手写或输入文字...',
-                      hintStyle: TextStyle(
-                        fontSize: Constants.fontSizeLarge,
-                        color: Colors.grey,
+                  child: Stack(
+                    children: [
+                      TextField(
+                        controller: _textController,
+                        maxLines: null,
+                        expands: true,
+                        textAlignVertical: TextAlignVertical.top,
+                        style: const TextStyle(
+                          fontSize: Constants.fontSizeLarge,
+                        ),
+                        decoration: const InputDecoration(
+                          hintText: '点击此处手写或输入文字...',
+                          hintStyle: TextStyle(
+                            fontSize: Constants.fontSizeLarge,
+                            color: Colors.grey,
+                          ),
+                          contentPadding: EdgeInsets.all(Constants.paddingNormal),
+                          border: InputBorder.none,
+                        ),
                       ),
-                      contentPadding: EdgeInsets.all(Constants.paddingNormal),
-                      border: InputBorder.none,
-                    ),
+                      // 清空按钮
+                      Positioned(
+                        top: 8,
+                        right: 8,
+                        child: ValueListenableBuilder<TextEditingValue>(
+                          valueListenable: _textController,
+                          builder: (context, value, child) {
+                            if (value.text.isEmpty) {
+                              return const SizedBox.shrink();
+                            }
+                            return GestureDetector(
+                              onTap: () => _textController.clear(),
+                              child: Container(
+                                padding: const EdgeInsets.all(4),
+                                decoration: BoxDecoration(
+                                  color: Colors.grey[300],
+                                  shape: BoxShape.circle,
+                                ),
+                                child: Icon(
+                                  Icons.close,
+                                  size: 16,
+                                  color: Colors.grey[700],
+                                ),
+                              ),
+                            );
+                          },
+                        ),
+                      ),
+                    ],
                   ),
                 ),
               ),
