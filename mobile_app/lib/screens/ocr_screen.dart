@@ -77,6 +77,9 @@ class _OcrScreenState extends State<OcrScreen> {
   }
 
   int? _findChipIndexAtPosition(Offset globalPosition) {
+    int? closestIndex;
+    double closestDistance = double.infinity;
+
     for (int i = 0; i < _wordBlocks.length; i++) {
       final key = _chipKeys[i];
       if (key?.currentContext != null) {
@@ -85,12 +88,25 @@ class _OcrScreenState extends State<OcrScreen> {
         final position = box.localToGlobal(Offset.zero);
 
         final rect = Rect.fromLTWH(position.dx, position.dy, size.width, size.height);
-        if (rect.contains(globalPosition)) {
-          return i;
+        // 扩展检测区域，增加灵敏度（上下左右各扩展 10 像素）
+        final expandedRect = rect.inflate(10);
+
+        if (expandedRect.contains(globalPosition)) {
+          // 计算手指位置到字符中心的距离
+          final center = Offset(
+            position.dx + size.width / 2,
+            position.dy + size.height / 2,
+          );
+          final distance = (center - globalPosition).distance;
+
+          if (distance < closestDistance) {
+            closestDistance = distance;
+            closestIndex = i;
+          }
         }
       }
     }
-    return null;
+    return closestIndex;
   }
 
   void _onPanStart(DragStartDetails details) {
@@ -103,12 +119,21 @@ class _OcrScreenState extends State<OcrScreen> {
         _wordBlocks[index].isSelected = _initialToggleState;
         _lastSelectedIndices.add(index);
       });
+    } else {
+      // 如果没有找到字符，记录当前位置，尝试在 update 时找到
+      _dragStartIndex = null;
     }
   }
 
   void _onPanUpdate(DragUpdateDetails details) {
     final currentIndex = _findChipIndexAtPosition(details.globalPosition);
-    if (currentIndex == null || _dragStartIndex == null) return;
+    if (currentIndex == null) return;
+
+    // 如果在 start 时没有找到起始字符，现在找到了，设置为起始
+    if (_dragStartIndex == null) {
+      _dragStartIndex = currentIndex;
+      _initialToggleState = !_wordBlocks[currentIndex].isSelected;
+    }
 
     // 计算起始和结束索引
     final startIndex = _dragStartIndex! < currentIndex ? _dragStartIndex! : currentIndex;

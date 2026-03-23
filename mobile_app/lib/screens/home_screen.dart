@@ -801,60 +801,47 @@ class _HomeScreenState extends State<HomeScreen> {
                     border: Border.all(color: Colors.grey),
                     borderRadius: BorderRadius.circular(12),
                   ),
-                  child: Stack(
-                    children: [
-                      TextField(
-                        controller: _textController,
-                        maxLines: null,
-                        expands: true,
-                        textAlignVertical: TextAlignVertical.top,
-                        style: const TextStyle(
-                          fontSize: Constants.fontSizeLarge,
-                        ),
-                        decoration: const InputDecoration(
-                          hintText: '点击此处手写或输入文字...',
-                          hintStyle: TextStyle(
-                            fontSize: Constants.fontSizeLarge,
-                            color: Colors.grey,
-                          ),
-                          contentPadding: EdgeInsets.only(
-                            left: Constants.paddingNormal,
-                            top: Constants.paddingNormal,
-                            bottom: Constants.paddingNormal,
-                            right: 40, // 为清空按钮留出空间
-                          ),
-                          border: InputBorder.none,
-                        ),
+                  child: TextField(
+                    controller: _textController,
+                    maxLines: null,
+                    expands: true,
+                    textAlignVertical: TextAlignVertical.top,
+                    style: const TextStyle(
+                      fontSize: Constants.fontSizeLarge,
+                    ),
+                    decoration: InputDecoration(
+                      hintText: '点击此处手写或输入文字...',
+                      hintStyle: const TextStyle(
+                        fontSize: Constants.fontSizeLarge,
+                        color: Colors.grey,
                       ),
-                      // 清空按钮
-                      Positioned(
-                        top: 8,
-                        right: 8,
-                        child: ValueListenableBuilder<TextEditingValue>(
-                          valueListenable: _textController,
-                          builder: (context, value, child) {
-                            if (value.text.isEmpty) {
-                              return const SizedBox.shrink();
-                            }
-                            return GestureDetector(
-                              onTap: () => _textController.clear(),
-                              child: Container(
-                                padding: const EdgeInsets.all(4),
-                                decoration: BoxDecoration(
-                                  color: Colors.grey[300],
-                                  shape: BoxShape.circle,
-                                ),
-                                child: Icon(
-                                  Icons.close,
-                                  size: 16,
-                                  color: Colors.grey[700],
-                                ),
+                      contentPadding: const EdgeInsets.all(Constants.paddingNormal),
+                      border: InputBorder.none,
+                      suffixIcon: ValueListenableBuilder<TextEditingValue>(
+                        valueListenable: _textController,
+                        builder: (context, value, child) {
+                          if (value.text.isEmpty) {
+                            return const SizedBox.shrink();
+                          }
+                          return GestureDetector(
+                            onTap: () => _textController.clear(),
+                            child: Container(
+                              margin: const EdgeInsets.all(8),
+                              padding: const EdgeInsets.all(4),
+                              decoration: BoxDecoration(
+                                color: Colors.grey[300],
+                                shape: BoxShape.circle,
                               ),
-                            );
-                          },
-                        ),
+                              child: Icon(
+                                Icons.close,
+                                size: 16,
+                                color: Colors.grey[700],
+                              ),
+                            ),
+                          );
+                        },
                       ),
-                    ],
+                    ),
                   ),
                 ),
               ),
