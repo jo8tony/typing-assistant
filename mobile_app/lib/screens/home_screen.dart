@@ -701,58 +701,82 @@ class _HomeScreenState extends State<HomeScreen> {
                               color: isCurrent
                                   ? Colors.green.withOpacity(0.1)
                                   : null,
-                              child: ListTile(
-                                leading: Icon(
-                                  computer.platform == 'macos'
-                                      ? Icons.apple
-                                      : Icons.computer,
-                                  color: isCurrent ? Colors.green : null,
-                                ),
-                                title: Text(
-                                  computer.name,
-                                  style: const TextStyle(fontSize: 14),
-                                ),
-                                subtitle: Text(
-                                  computer.ip,
-                                  style: const TextStyle(fontSize: 12),
-                                ),
-                                trailing: isCurrent
-                                    ? const Chip(
-                                        label: Text('当前'),
-                                        backgroundColor: Colors.green,
-                                        labelStyle:
-                                            TextStyle(color: Colors.white, fontSize: 12),
-                                      )
-                                    : ElevatedButton(
-                                        onPressed: () async {
-                                          // 先断开当前连接
-                                          if (wsService
-                                              .connectionModel.isConnected) {
-                                            await wsService.disconnect();
-                                          }
-
-                                          // 连接到新服务端
-                                          final success = await wsService.connect(
-                                            computer,
-                                            autoReconnect: true,
-                                          );
-
-                                          if (success && mounted) {
-                                            Navigator.pop(context);
-                                            _showSnackBar(
-                                              '已切换到 ${computer.name}',
-                                              isError: false,
-                                            );
-                                          } else if (mounted) {
-                                            final errorMsg = wsService
-                                                .connectionModel.errorMessage;
-                                            _showSnackBar(errorMsg.isNotEmpty
-                                                ? errorMsg
-                                                : '连接失败');
-                                          }
-                                        },
-                                        child: const Text('切换'),
+                              child: Padding(
+                                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                                child: Row(
+                                  children: [
+                                    Icon(
+                                      computer.platform == 'macos'
+                                          ? Icons.apple
+                                          : Icons.computer,
+                                      color: isCurrent ? Colors.green : null,
+                                      size: 24,
+                                    ),
+                                    const SizedBox(width: 12),
+                                    Expanded(
+                                      child: Column(
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          Text(
+                                            computer.name,
+                                            style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
+                                            overflow: TextOverflow.ellipsis,
+                                          ),
+                                          Text(
+                                            computer.ip,
+                                            style: const TextStyle(fontSize: 12, color: Colors.grey),
+                                          ),
+                                        ],
                                       ),
+                                    ),
+                                    const SizedBox(width: 8),
+                                    isCurrent
+                                        ? const Chip(
+                                            label: Text('当前'),
+                                            backgroundColor: Colors.green,
+                                            labelStyle:
+                                                TextStyle(color: Colors.white, fontSize: 12),
+                                            padding: EdgeInsets.symmetric(horizontal: 8),
+                                          )
+                                        : SizedBox(
+                                            height: 36,
+                                            child: ElevatedButton(
+                                              onPressed: () async {
+                                                // 先断开当前连接
+                                                if (wsService
+                                                    .connectionModel.isConnected) {
+                                                  await wsService.disconnect();
+                                                }
+
+                                                // 连接到新服务端
+                                                final success = await wsService.connect(
+                                                  computer,
+                                                  autoReconnect: true,
+                                                );
+
+                                                if (success && mounted) {
+                                                  Navigator.pop(context);
+                                                  _showSnackBar(
+                                                    '已切换到 ${computer.name}',
+                                                    isError: false,
+                                                  );
+                                                } else if (mounted) {
+                                                  final errorMsg = wsService
+                                                      .connectionModel.errorMessage;
+                                                  _showSnackBar(errorMsg.isNotEmpty
+                                                      ? errorMsg
+                                                      : '连接失败');
+                                                }
+                                              },
+                                              child: const Text(
+                                                '切换',
+                                                style: TextStyle(fontSize: 14),
+                                              ),
+                                            ),
+                                          ),
+                                  ],
+                                ),
                               ),
                             );
                           },
