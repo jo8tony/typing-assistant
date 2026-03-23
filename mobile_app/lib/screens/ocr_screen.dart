@@ -18,11 +18,17 @@ class OcrScreen extends StatefulWidget {
 
 class _OcrScreenState extends State<OcrScreen> {
   late List<OcrWordBlock> _wordBlocks;
+  final Map<int, GlobalKey> _chipKeys = {};
+  final Set<int> _lastSelectedIndices = {};
+  bool _initialToggleState = false;
 
   @override
   void initState() {
     super.initState();
     _wordBlocks = _splitBlocksIntoCharacters(widget.textBlocks);
+    for (int i = 0; i < _wordBlocks.length; i++) {
+      _chipKeys[i] = GlobalKey();
+    }
   }
 
   List<OcrWordBlock> _splitBlocksIntoCharacters(List<OcrTextBlock> blocks) {
@@ -67,6 +73,49 @@ class _OcrScreenState extends State<OcrScreen> {
     setState(() {
       _wordBlocks[index].isSelected = !_wordBlocks[index].isSelected;
     });
+  }
+
+  int? _findChipIndexAtPosition(Offset globalPosition) {
+    for (int i = 0; i < _wordBlocks.length; i++) {
+      final key = _chipKeys[i];
+      if (key?.currentContext != null) {
+        final box = key!.currentContext!.findRenderObject() as RenderBox;
+        final size = box.size;
+        final position = box.localToGlobal(Offset.zero);
+
+        final rect = Rect.fromLTWH(position.dx, position.dy, size.width, size.height);
+        if (rect.contains(globalPosition)) {
+          return i;
+        }
+      }
+    }
+    return null;
+  }
+
+  void _onPanStart(DragStartDetails details) {
+    _lastSelectedIndices.clear();
+    final index = _findChipIndexAtPosition(details.globalPosition);
+    if (index != null) {
+      _initialToggleState = !_wordBlocks[index].isSelected;
+      setState(() {
+        _wordBlocks[index].isSelected = _initialToggleState;
+        _lastSelectedIndices.add(index);
+      });
+    }
+  }
+
+  void _onPanUpdate(DragUpdateDetails details) {
+    final index = _findChipIndexAtPosition(details.globalPosition);
+    if (index != null && !_lastSelectedIndices.contains(index)) {
+      setState(() {
+        _wordBlocks[index].isSelected = _initialToggleState;
+        _lastSelectedIndices.add(index);
+      });
+    }
+  }
+
+  void _onPanEnd(DragEndDetails details) {
+    _lastSelectedIndices.clear();
   }
 
   void _fillSelectedText() {
@@ -152,16 +201,21 @@ class _OcrScreenState extends State<OcrScreen> {
                 : const SizedBox.shrink(),
           ),
           Expanded(
-            child: Container(
-              color: Colors.grey[100],
-              child: SingleChildScrollView(
-                padding: const EdgeInsets.all(Constants.paddingNormal),
-                child: Wrap(
-                  spacing: 6,
-                  runSpacing: 6,
-                  children: _wordBlocks.asMap().entries.map((entry) {
-                    return _buildWordChip(entry.key, entry.value);
-                  }).toList(),
+            child: GestureDetector(
+              onPanStart: _onPanStart,
+              onPanUpdate: _onPanUpdate,
+              onPanEnd: _onPanEnd,
+              child: Container(
+                color: Colors.grey[100],
+                child: SingleChildScrollView(
+                  padding: const EdgeInsets.all(Constants.paddingNormal),
+                  child: Wrap(
+                    spacing: 6,
+                    runSpacing: 6,
+                    children: _wordBlocks.asMap().entries.map((entry) {
+                      return _buildWordChip(entry.key, entry.value);
+                    }).toList(),
+                  ),
                 ),
               ),
             ),
@@ -234,11 +288,9 @@ class _OcrScreenState extends State<OcrScreen> {
   }
 
   Widget _buildWordChip(int index, OcrWordBlock word) {
-    return Listener(
-      behavior: HitTestBehavior.translucent,
-      onPointerDown: (event) {
-        _handleWordTap(index);
-      },
+    return GestureDetector(
+      key: _chipKeys[index],
+      onTap: () => _handleWordTap(index),
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
         decoration: BoxDecoration(
