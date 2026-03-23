@@ -679,7 +679,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
                             return Card(
                               color: isCurrent
-                                  ? Colors.green.withValues(alpha: 0.1)
+                                  ? Colors.green.withOpacity(0.1)
                                   : null,
                               child: ListTile(
                                 leading: Icon(
