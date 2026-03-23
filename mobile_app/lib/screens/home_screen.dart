@@ -26,6 +26,8 @@ class _HomeScreenState extends State<HomeScreen> {
   final DiscoveryService _discoveryService = DiscoveryService();
   final ImagePicker _imagePicker = ImagePicker();
   bool _isSending = false;
+  bool _hasAutoConnected = false; // 标记是否已经尝试过自动连接
+  bool _isShowingServerList = false; // 标记是否正在显示服务器列表
 
   @override
   void initState() {
@@ -128,22 +130,36 @@ class _HomeScreenState extends State<HomeScreen> {
 
     // 监听发现的电脑
     _discoveryService.computersStream.listen((computers) {
-      if (computers.isNotEmpty) {
-        final wsService = context.read<WebSocketService>();
-        // 只有在未连接且未在连接中时才自动连接
-        if (!wsService.connectionModel.isConnected &&
-            !wsService.connectionModel.isConnecting) {
-          // 检查是否已经手动连接过这个 IP
-          final savedIp = wsService.connectionModel.computerIp;
-          final matchingComputer = computers.cast<DiscoveredComputer?>().firstWhere(
-            (c) => c!.ip == savedIp,
-            orElse: () => null,
-          );
-          // 如果当前保存的 IP 在发现的列表中，或者没有保存的 IP，才自动连接
-          if (savedIp.isEmpty || matchingComputer != null) {
-            wsService.connect(computers.first);
-          }
-        }
+      if (!mounted) return;
+
+      final wsService = context.read<WebSocketService>();
+
+      // 如果已经连接或正在连接，不处理
+      if (wsService.connectionModel.isConnected ||
+          wsService.connectionModel.isConnecting) {
+        return;
+      }
+
+      // 如果已经自动连接过，不再处理
+      if (_hasAutoConnected) return;
+
+      if (computers.isEmpty) {
+        // 没有发现服务，不处理
+        return;
+      }
+
+      // 标记已经尝试过自动连接
+      _hasAutoConnected = true;
+
+      if (computers.length == 1) {
+        // 只有一个服务，自动连接
+        debugPrint('发现唯一服务，自动连接: ${computers.first.ip}');
+        wsService.connect(computers.first, autoReconnect: true);
+        _showSnackBar('已自动连接到 ${computers.first.name}', isError: false);
+      } else {
+        // 多个服务，显示选择对话框
+        debugPrint('发现多个服务，显示选择对话框: ${computers.length} 个');
+        _showServerSelectionDialog(computers);
       }
     });
   }
@@ -420,6 +436,98 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
+  /// 显示服务器选择对话框
+  void _showServerSelectionDialog(List<DiscoveredComputer> computers) {
+    if (_isShowingServerList) return; // 避免重复显示
+    _isShowingServerList = true;
+
+    showDialog(
+      context: context,
+      barrierDismissible: false, // 必须选择或关闭
+      builder:
+          (context) => AlertDialog(
+            title: Row(
+              children: [
+                const Expanded(child: Text('选择电脑')),
+                IconButton(
+                  icon: const Icon(Icons.close),
+                  onPressed: () {
+                    _isShowingServerList = false;
+                    Navigator.pop(context);
+                  },
+                ),
+              ],
+            ),
+            content: SizedBox(
+              width: double.maxFinite,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('发现了 ${computers.length} 台电脑：'),
+                  const SizedBox(height: 16),
+                  Flexible(
+                    child: ListView.builder(
+                      shrinkWrap: true,
+                      itemCount: computers.length,
+                      itemBuilder: (context, index) {
+                        final computer = computers[index];
+                        return Card(
+                          child: ListTile(
+                            leading: Icon(
+                              computer.platform == 'macos'
+                                  ? Icons.apple
+                                  : Icons.computer,
+                            ),
+                            title: Text(computer.name),
+                            subtitle: Text(computer.ip),
+                            trailing: ElevatedButton(
+                              onPressed: () async {
+                                _isShowingServerList = false;
+                                Navigator.pop(context);
+
+                                final wsService = context.read<WebSocketService>();
+                                final success = await wsService.connect(
+                                  computer,
+                                  autoReconnect: true,
+                                );
+
+                                if (success && mounted) {
+                                  _showSnackBar(
+                                    '已连接到 ${computer.name}',
+                                    isError: false,
+                                  );
+                                } else if (mounted) {
+                                  final errorMsg = wsService.connectionModel.errorMessage;
+                                  _showSnackBar(errorMsg.isNotEmpty ? errorMsg : '连接失败');
+                                }
+                              },
+                              child: const Text('连接'),
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+                  ),
+                  const Divider(),
+                  ListTile(
+                    leading: const Icon(Icons.add),
+                    title: const Text('手动输入 IP 地址'),
+                    onTap: () {
+                      _isShowingServerList = false;
+                      Navigator.pop(context);
+                      _showConnectionDialog();
+                    },
+                  ),
+                ],
+              ),
+            ),
+          ),
+    ).then((_) {
+      _isShowingServerList = false;
+    });
+  }
+
   /// 显示连接对话框
   void _showConnectionDialog() {
     final ipController = TextEditingController();
@@ -516,6 +624,56 @@ class _HomeScreenState extends State<HomeScreen> {
                   },
                 ),
                 const SizedBox(height: 16),
+                // 显示已发现的服务列表
+                StreamBuilder<List<DiscoveredComputer>>(
+                  stream: _discoveryService.computersStream,
+                  initialData: _discoveryService.discoveredComputers,
+                  builder: (context, snapshot) {
+                    final computers = snapshot.data ?? [];
+                    if (computers.isEmpty) return const SizedBox.shrink();
+
+                    return Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          '发现的电脑',
+                          style: TextStyle(
+                            fontSize: Constants.fontSizeNormal,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        ...computers.map((computer) => ListTile(
+                          dense: true,
+                          leading: Icon(
+                            computer.platform == 'macos'
+                                ? Icons.apple
+                                : Icons.computer,
+                          ),
+                          title: Text(
+                            computer.name,
+                            style: const TextStyle(fontSize: Constants.fontSizeSmall),
+                          ),
+                          subtitle: Text(
+                            computer.ip,
+                            style: const TextStyle(fontSize: Constants.fontSizeSmall),
+                          ),
+                          trailing: TextButton(
+                            onPressed: isConnecting || isTesting
+                                ? null
+                                : () {
+                                    ipController.text = computer.ip;
+                                    setDialogState(() {});
+                                  },
+                            child: const Text('使用'),
+                          ),
+                        )),
+                        const Divider(),
+                        const SizedBox(height: 8),
+                      ],
+                    );
+                  },
+                ),
                 const Text(
                   '电脑 IP 地址',
                   style: TextStyle(
@@ -793,6 +951,75 @@ class _HomeScreenState extends State<HomeScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
+              // 在未连接状态下显示发现状态
+              Consumer<WebSocketService>(
+                builder: (context, wsService, child) {
+                  if (wsService.connectionModel.isConnected) {
+                    return const SizedBox.shrink();
+                  }
+
+                  return StreamBuilder<List<DiscoveredComputer>>(
+                    stream: _discoveryService.computersStream,
+                    initialData: _discoveryService.discoveredComputers,
+                    builder: (context, snapshot) {
+                      final computers = snapshot.data ?? [];
+
+                      if (computers.isEmpty) {
+                        return Container(
+                          padding: const EdgeInsets.all(12),
+                          margin: const EdgeInsets.only(bottom: 8),
+                          decoration: BoxDecoration(
+                            color: Colors.blue.withOpacity(0.1),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: const Row(
+                            children: [
+                              SizedBox(
+                                width: 16,
+                                height: 16,
+                                child: CircularProgressIndicator(strokeWidth: 2),
+                              ),
+                              SizedBox(width: 12),
+                              Expanded(
+                                child: Text(
+                                  '正在搜索局域网中的电脑...',
+                                  style: TextStyle(color: Colors.blue),
+                                ),
+                              ),
+                            ],
+                          ),
+                        );
+                      }
+
+                      return Container(
+                        padding: const EdgeInsets.all(12),
+                        margin: const EdgeInsets.only(bottom: 8),
+                        decoration: BoxDecoration(
+                          color: Colors.green.withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Row(
+                          children: [
+                            const Icon(Icons.check_circle, color: Colors.green, size: 20),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Text(
+                                '发现 ${computers.length} 台电脑',
+                                style: const TextStyle(color: Colors.green),
+                              ),
+                            ),
+                            if (computers.length > 1)
+                              TextButton(
+                                onPressed: () => _showServerSelectionDialog(computers),
+                                child: const Text('选择'),
+                              ),
+                          ],
+                        ),
+                      );
+                    },
+                  );
+                },
+              ),
               // 文字输入区域 - 使用 Flexible 而不是 Expanded，避免键盘弹出时被压缩
               Flexible(
                 flex: 3,
