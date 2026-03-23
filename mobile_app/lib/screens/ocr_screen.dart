@@ -21,6 +21,7 @@ class _OcrScreenState extends State<OcrScreen> {
   final Map<int, GlobalKey> _chipKeys = {};
   final Set<int> _lastSelectedIndices = {};
   bool _initialToggleState = false;
+  int? _dragStartIndex;
 
   @override
   void initState() {
@@ -96,6 +97,7 @@ class _OcrScreenState extends State<OcrScreen> {
     _lastSelectedIndices.clear();
     final index = _findChipIndexAtPosition(details.globalPosition);
     if (index != null) {
+      _dragStartIndex = index;
       _initialToggleState = !_wordBlocks[index].isSelected;
       setState(() {
         _wordBlocks[index].isSelected = _initialToggleState;
@@ -105,17 +107,27 @@ class _OcrScreenState extends State<OcrScreen> {
   }
 
   void _onPanUpdate(DragUpdateDetails details) {
-    final index = _findChipIndexAtPosition(details.globalPosition);
-    if (index != null && !_lastSelectedIndices.contains(index)) {
-      setState(() {
-        _wordBlocks[index].isSelected = _initialToggleState;
-        _lastSelectedIndices.add(index);
-      });
-    }
+    final currentIndex = _findChipIndexAtPosition(details.globalPosition);
+    if (currentIndex == null || _dragStartIndex == null) return;
+
+    // 计算起始和结束索引
+    final startIndex = _dragStartIndex! < currentIndex ? _dragStartIndex! : currentIndex;
+    final endIndex = _dragStartIndex! < currentIndex ? currentIndex : _dragStartIndex!;
+
+    setState(() {
+      // 选中起始行开始到结束行结束之间的所有字符
+      for (int i = startIndex; i <= endIndex; i++) {
+        if (!_lastSelectedIndices.contains(i)) {
+          _wordBlocks[i].isSelected = _initialToggleState;
+          _lastSelectedIndices.add(i);
+        }
+      }
+    });
   }
 
   void _onPanEnd(DragEndDetails details) {
     _lastSelectedIndices.clear();
+    _dragStartIndex = null;
   }
 
   void _fillSelectedText() {
@@ -176,29 +188,28 @@ class _OcrScreenState extends State<OcrScreen> {
       ),
       body: Column(
         children: [
-          AnimatedContainer(
-            duration: const Duration(milliseconds: 200),
-            height: selectedCount > 0 ? 40 : 0,
-            child: selectedCount > 0
-                ? Container(
-                    alignment: Alignment.center,
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(Icons.check_circle, color: Colors.blue[700], size: 20),
-                        const SizedBox(width: 8),
-                        Text(
-                          '已选择 $selectedCount 个字符',
-                          style: TextStyle(
-                            fontSize: Constants.fontSizeNormal,
-                            color: Colors.blue[700],
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                      ],
-                    ),
-                  )
-                : const SizedBox.shrink(),
+          Container(
+            height: 40,
+            alignment: Alignment.center,
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(
+                  selectedCount > 0 ? Icons.check_circle : Icons.info_outline,
+                  color: selectedCount > 0 ? Colors.blue[700] : Colors.grey[400],
+                  size: 20,
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  selectedCount > 0 ? '已选择 $selectedCount 个字符' : '点击或滑动选择文字',
+                  style: TextStyle(
+                    fontSize: Constants.fontSizeNormal,
+                    color: selectedCount > 0 ? Colors.blue[700] : Colors.grey[500],
+                    fontWeight: selectedCount > 0 ? FontWeight.bold : FontWeight.normal,
+                  ),
+                ),
+              ],
+            ),
           ),
           Expanded(
             child: GestureDetector(

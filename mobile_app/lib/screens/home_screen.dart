@@ -94,13 +94,9 @@ class _HomeScreenState extends State<HomeScreen> {
                       },
                     ),
                     onTap: () {
-                      // 将选中的历史记录追加到输入框
+                      // 将选中的历史记录追加到输入框（直接追加，不换行）
                       final currentText = _textController.text;
-                      if (currentText.isNotEmpty) {
-                        _textController.text = '$currentText\n$text';
-                      } else {
-                        _textController.text = text;
-                      }
+                      _textController.text = currentText + text;
                       Navigator.pop(context);
                     },
                   );
@@ -380,13 +376,9 @@ class _HomeScreenState extends State<HomeScreen> {
           builder: (context) => OcrScreen(
             textBlocks: blocks,
             onSend: (selectedText) {
-              // 将选中的文字追加到输入框
+              // 将选中的文字追加到输入框（直接追加，不换行）
               final currentText = _textController.text;
-              if (currentText.isNotEmpty) {
-                _textController.text = '$currentText\n$selectedText';
-              } else {
-                _textController.text = selectedText;
-              }
+              _textController.text = currentText + selectedText;
             },
           ),
         ),
@@ -825,7 +817,12 @@ class _HomeScreenState extends State<HomeScreen> {
                             fontSize: Constants.fontSizeLarge,
                             color: Colors.grey,
                           ),
-                          contentPadding: EdgeInsets.all(Constants.paddingNormal),
+                          contentPadding: EdgeInsets.only(
+                            left: Constants.paddingNormal,
+                            top: Constants.paddingNormal,
+                            bottom: Constants.paddingNormal,
+                            right: 40, // 为清空按钮留出空间
+                          ),
                           border: InputBorder.none,
                         ),
                       ),
