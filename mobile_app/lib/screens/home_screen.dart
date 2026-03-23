@@ -595,8 +595,10 @@ class _HomeScreenState extends State<HomeScreen> {
                   final computers = snapshot.data ?? [];
                   final wsService = context.read<WebSocketService>();
                   final currentIp = wsService.connectionModel.computerIp;
+                  final isScanning = _discoveryService.isScanning;
 
-                  if (computers.isEmpty) {
+                  // 如果正在扫描且没有发现服务，显示扫描中状态
+                  if (computers.isEmpty && isScanning) {
                     return const Center(
                       child: Column(
                         mainAxisAlignment: MainAxisAlignment.center,
@@ -604,6 +606,48 @@ class _HomeScreenState extends State<HomeScreen> {
                           CircularProgressIndicator(),
                           SizedBox(height: 16),
                           Text('正在扫描局域网中的服务端...'),
+                          SizedBox(height: 8),
+                          Text(
+                            '这可能需要几秒钟',
+                            style: TextStyle(fontSize: 12, color: Colors.grey),
+                          ),
+                        ],
+                      ),
+                    );
+                  }
+
+                  // 如果没有发现服务且扫描已完成
+                  if (computers.isEmpty && !isScanning) {
+                    return Center(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          const Icon(Icons.computer, size: 48, color: Colors.grey),
+                          const SizedBox(height: 16),
+                          const Text('未发现局域网服务端'),
+                          const SizedBox(height: 8),
+                          const Text(
+                            '请确保电脑端服务已启动，\n且手机和电脑在同一网络',
+                            textAlign: TextAlign.center,
+                            style: TextStyle(fontSize: 12, color: Colors.grey),
+                          ),
+                          const SizedBox(height: 16),
+                          ElevatedButton.icon(
+                            onPressed: () {
+                              _discoveryService.restartDiscovery();
+                              setDialogState(() {});
+                            },
+                            icon: const Icon(Icons.refresh),
+                            label: const Text('重新扫描'),
+                          ),
+                          const SizedBox(height: 8),
+                          TextButton(
+                            onPressed: () {
+                              Navigator.pop(context);
+                              _showConnectionDialog();
+                            },
+                            child: const Text('手动输入 IP 连接'),
+                          ),
                         ],
                       ),
                     );
@@ -612,7 +656,18 @@ class _HomeScreenState extends State<HomeScreen> {
                   return Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text('发现 ${computers.length} 台电脑：'),
+                      Row(
+                        children: [
+                          Text('发现 ${computers.length} 台电脑：'),
+                          const Spacer(),
+                          if (isScanning)
+                            const SizedBox(
+                              width: 16,
+                              height: 16,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            ),
+                        ],
+                      ),
                       const SizedBox(height: 8),
                       Expanded(
                         child: ListView.builder(
@@ -624,7 +679,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
                             return Card(
                               color: isCurrent
-                                  ? Colors.green.withOpacity(0.1)
+                                  ? Colors.green.withValues(alpha: 0.1)
                                   : null,
                               child: ListTile(
                                 leading: Icon(
@@ -683,6 +738,13 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
             ),
             actions: [
+              TextButton(
+                onPressed: () {
+                  Navigator.pop(context);
+                  _showConnectionDialog();
+                },
+                child: const Text('手动输入'),
+              ),
               TextButton.icon(
                 onPressed: () {
                   _discoveryService.restartDiscovery();
