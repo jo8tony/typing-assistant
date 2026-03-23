@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import '../services/ocr_service.dart';
 import '../utils/constants.dart';
 
-/// OCR 结果选择界面（支持更细粒度拆分和滑动选择）
 class OcrScreen extends StatefulWidget {
   final List<OcrTextBlock> textBlocks;
   final Function(String) onSend;
@@ -26,7 +25,6 @@ class _OcrScreenState extends State<OcrScreen> {
     _wordBlocks = _splitBlocksIntoCharacters(widget.textBlocks);
   }
 
-  /// 将大块文本拆分成更细的字符块
   List<OcrWordBlock> _splitBlocksIntoCharacters(List<OcrTextBlock> blocks) {
     List<OcrWordBlock> characters = [];
     int charIndex = 0;
@@ -51,7 +49,6 @@ class _OcrScreenState extends State<OcrScreen> {
     return characters;
   }
 
-  /// 获取选中的文字
   String _getSelectedText() {
     final selectedChars = _wordBlocks.where((w) => w.isSelected).toList();
     if (selectedChars.isEmpty) return '';
@@ -66,7 +63,6 @@ class _OcrScreenState extends State<OcrScreen> {
     return buffer.toString();
   }
 
-  /// 处理字符块点击
   void _handleWordTap(int index) {
     setState(() {
       _wordBlocks[index].isSelected = !_wordBlocks[index].isSelected;
@@ -238,8 +234,11 @@ class _OcrScreenState extends State<OcrScreen> {
   }
 
   Widget _buildWordChip(int index, OcrWordBlock word) {
-    return GestureDetector(
-      onTap: () => _handleWordTap(index),
+    return Listener(
+      behavior: HitTestBehavior.translucent,
+      onPointerDown: (event) {
+        _handleWordTap(index);
+      },
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
         decoration: BoxDecoration(
