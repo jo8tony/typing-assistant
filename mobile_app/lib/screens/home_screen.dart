@@ -697,6 +697,8 @@ class _HomeScreenState extends State<HomeScreen> {
                             final isCurrent = computer.ip == currentIp &&
                                 wsService.connectionModel.isConnected;
 
+                            debugPrint('渲染电脑列表项 #${index}: ${computer.name} @ ${computer.ip}:${computer.port}');
+
                             return Card(
                               color: isCurrent
                                   ? Colors.green.withOpacity(0.1)
