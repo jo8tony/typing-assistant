@@ -126,10 +126,15 @@ class DiscoveryService {
 
   void _handleUdpMessage(Datagram datagram) {
     try {
+      debugPrint('收到 UDP 消息：${datagram.data.length} bytes, 来自 ${datagram.address.address}:${datagram.port}');
+      
       final message = utf8.decode(datagram.data);
+      debugPrint('消息内容：$message');
+      
       final data = jsonDecode(message);
       
       final type = data['type'];
+      debugPrint('消息类型：$type');
       
       if (type == 'discovery' || type == 'response') {
         final serverData = data['data'];
@@ -141,9 +146,13 @@ class DiscoveryService {
             platform: serverData['platform'] ?? 'unknown',
           );
           
-          debugPrint('收到${type == 'discovery' ? '广播' : '响应'}: ${computer.name} (${computer.ip})');
+          debugPrint('收到${type == 'discovery' ? '广播' : '响应'}: ${computer.name} (${computer.ip}:${computer.port})');
           _addComputer(computer);
+        } else {
+          debugPrint('警告：消息中没有 data 字段');
         }
+      } else {
+        debugPrint('忽略未知类型的消息：$type');
       }
     } catch (e) {
       debugPrint('处理 UDP 消息失败：$e');
