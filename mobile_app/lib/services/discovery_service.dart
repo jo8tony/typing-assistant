@@ -39,12 +39,19 @@ class DiscoveryService {
   Future<void> startDiscovery() async {
     await stopDiscovery();
     _isScanning = true;
+    _discoveredComputers.clear();
+    _computersController.add([]);
 
-    // 启动 mDNS 发现
-    _startMdnsDiscovery();
+    debugPrint('开始网络发现...');
 
-    // 同时启动局域网扫描作为备用
-    _startNetworkScan();
+    // 同时启动两种发现方式
+    await Future.wait([
+      _startMdnsDiscovery(),
+      _startNetworkScan(),
+    ]);
+
+    _isScanning = false;
+    debugPrint('网络发现完成，发现 ${_discoveredComputers.length} 个服务');
   }
 
   /// 启动 mDNS 发现
@@ -52,6 +59,7 @@ class DiscoveryService {
     try {
       _client = MDnsClient();
       await _client!.start();
+      debugPrint('mDNS 客户端已启动');
 
       // 立即搜索一次
       await _searchMdnsServices();
@@ -70,33 +78,45 @@ class DiscoveryService {
     if (_client == null) return;
 
     try {
+      debugPrint('开始 mDNS 搜索: ${Constants.mdnsServiceType}');
+      
       await for (final PtrResourceRecord ptr in _client!.lookup<PtrResourceRecord>(
         ResourceRecordQuery.serverPointer(Constants.mdnsServiceType),
       )) {
         final serviceName = ptr.domainName;
+        debugPrint('发现 mDNS 服务: $serviceName');
 
         // 获取 SRV 记录
         await for (final SrvResourceRecord srv in _client!.lookup<SrvResourceRecord>(
           ResourceRecordQuery.service(serviceName),
         )) {
+          debugPrint('  SRV 记录: ${srv.target}:${srv.port}');
+          
           // 获取 IP 地址
           await for (final IPAddressResourceRecord ip in _client!.lookup<IPAddressResourceRecord>(
             ResourceRecordQuery.addressIPv4(srv.target),
           )) {
+            debugPrint('  IP 地址: ${ip.address.address}');
+            
             // 获取 TXT 记录
             String platform = 'unknown';
-            await for (final TxtResourceRecord txt in _client!.lookup<TxtResourceRecord>(
-              ResourceRecordQuery.text(serviceName),
-            )) {
-              // txt.text 是 List<int> 类型，需要解码
-              final text = utf8.decode(txt.text as List<int>);
-              if (text.contains('platform=')) {
-                platform = text.split('platform=')[1].split(',')[0];
+            try {
+              await for (final TxtResourceRecord txt in _client!.lookup<TxtResourceRecord>(
+                ResourceRecordQuery.text(serviceName),
+              )) {
+                // txt.text 是 List<int> 类型，需要解码
+                final text = utf8.decode(txt.text as List<int>);
+                debugPrint('  TXT 记录: $text');
+                if (text.contains('platform=')) {
+                  platform = text.split('platform=')[1].split(',')[0];
+                }
               }
+            } catch (e) {
+              debugPrint('  获取 TXT 记录失败: $e');
             }
 
             final computer = DiscoveredComputer(
-              name: serviceName.replaceAll('.${Constants.mdnsServiceType}.local.', ''),
+              name: serviceName.replaceAll('.${Constants.mdnsServiceType}', ''),
               ip: ip.address.address,
               port: srv.port,
               platform: platform,
@@ -137,12 +157,12 @@ class DiscoveryService {
 
       futures.add(_checkWebSocketService(ip));
 
-      // 每 20 个 IP 一批，避免并发过多
-      if (futures.length >= 20) {
+      // 每 30 个 IP 一批，避免并发过多
+      if (futures.length >= 30) {
         await Future.wait(futures);
         futures.clear();
         // 小延迟，避免网络拥塞
-        await Future.delayed(const Duration(milliseconds: 50));
+        await Future.delayed(const Duration(milliseconds: 100));
       }
     }
 
@@ -158,7 +178,7 @@ class DiscoveryService {
   Future<void> _checkWebSocketService(String ip) async {
     try {
       final socket = await Socket.connect(ip, Constants.websocketPort,
-          timeout: const Duration(milliseconds: 500));
+          timeout: const Duration(milliseconds: 800));
 
       // 发送 WebSocket 握手请求
       final request =
@@ -183,9 +203,10 @@ class DiscoveryService {
             platform: 'unknown',
           );
           _addComputer(computer);
+          debugPrint('IP扫描发现服务: $ip');
         }
         socket.destroy();
-      }).asFuture().timeout(const Duration(seconds: 1));
+      }).asFuture().timeout(const Duration(seconds: 2));
 
     } catch (e) {
       // 连接失败或不是 WebSocket 服务，忽略

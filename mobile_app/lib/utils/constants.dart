@@ -8,7 +8,7 @@ class Constants {
   static const Duration reconnectInterval = Duration(seconds: 5);
   
   // mDNS 配置
-  static const String mdnsServiceType = '_typing._tcp';
+  static const String mdnsServiceType = '_typing._tcp.local.';
   
   // 消息类型
   static const String msgTypeText = 'text';
