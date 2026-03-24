@@ -40,11 +40,12 @@ class DiscoveryService {
     _computersController.add([]);
 
     debugPrint('开始网络发现...');
+    debugPrint('mDNS 服务类型：${Constants.mdnsServiceType}');
 
-    await Future.wait([
-      _startMdnsDiscovery(),
-      _startNetworkScan(),
-    ]);
+    final mdnsFuture = _startMdnsDiscovery();
+    final networkFuture = _startNetworkScan();
+    
+    await Future.wait([mdnsFuture, networkFuture]);
 
     _isScanning = false;
     debugPrint('网络发现完成，发现 ${_discoveredComputers.length} 个服务');
@@ -53,29 +54,34 @@ class DiscoveryService {
   Future<void> _startMdnsDiscovery() async {
     try {
       _client = MDnsClient();
+      debugPrint('正在启动 mDNS 客户端...');
       await _client!.start();
-      debugPrint('mDNS 客户端已启动');
+      debugPrint('mDNS 客户端已启动，准备查询...');
 
       unawaited(_searchMdnsServices());
 
       _searchTimer = Timer.periodic(const Duration(seconds: 3), (_) {
-        if (_isScanning) {
+        if (_isScanning && _client != null) {
           unawaited(_searchMdnsServices());
         }
       });
-    } catch (e) {
+    } catch (e, stackTrace) {
       debugPrint('mDNS 启动失败：$e');
+      debugPrint('堆栈：$stackTrace');
       rethrow;
     }
   }
 
   Future<void> _searchMdnsServices() async {
-    if (_client == null) return;
+    if (_client == null) {
+      debugPrint('mDNS 客户端为 null，跳过搜索');
+      return;
+    }
 
     try {
-      debugPrint('开始 mDNS 搜索...');
+      debugPrint('开始 mDNS PTR 查询...');
+      debugPrint('  查询域名：${Constants.mdnsServiceType}');
       
-      // 直接查询 _typing._tcp.local. 域下的所有服务实例
       final ptrRecords = await _client!
           .lookup<PtrResourceRecord>(
             ResourceRecordQuery.serverPointer(Constants.mdnsServiceType),
@@ -83,6 +89,7 @@ class DiscoveryService {
           .timeout(
             const Duration(seconds: 3),
             onTimeout: (EventSink<PtrResourceRecord> sink) {
+              debugPrint('PTR 查询超时');
               sink.close();
             },
           )
@@ -90,12 +97,15 @@ class DiscoveryService {
       
       debugPrint('mDNS PTR 查询完成，发现 ${ptrRecords.length} 个服务');
       
+      if (ptrRecords.isEmpty) {
+        debugPrint('  提示：请确认电脑端服务已启动，并且手机和电脑在同一 WiFi 网络');
+      }
+      
       for (final ptr in ptrRecords) {
         try {
           final serviceName = ptr.domainName;
           debugPrint('发现服务：$serviceName');
           
-          // 获取 SRV 记录
           final srvRecords = await _client!
               .lookup<SrvResourceRecord>(
                 ResourceRecordQuery.service(serviceName),
@@ -103,6 +113,7 @@ class DiscoveryService {
               .timeout(
                 const Duration(seconds: 2),
                 onTimeout: (EventSink<SrvResourceRecord> sink) {
+                  debugPrint('  SRV 查询超时');
                   sink.close();
                 },
               )
@@ -111,7 +122,6 @@ class DiscoveryService {
           for (final srv in srvRecords) {
             debugPrint('  SRV: ${srv.target}:${srv.port}');
             
-            // 获取 IP 地址
             final ipRecords = await _client!
                 .lookup<IPAddressResourceRecord>(
                   ResourceRecordQuery.addressIPv4(srv.target),
@@ -119,6 +129,7 @@ class DiscoveryService {
                 .timeout(
                   const Duration(milliseconds: 800),
                   onTimeout: (EventSink<IPAddressResourceRecord> sink) {
+                    debugPrint('  IP 查询超时');
                     sink.close();
                   },
                 )
@@ -127,7 +138,6 @@ class DiscoveryService {
             for (final ip in ipRecords) {
               debugPrint('  IP: ${ip.address.address}');
               
-              // 获取 TXT 记录
               String platform = 'unknown';
               try {
                 final txtRecords = await _client!
@@ -137,6 +147,7 @@ class DiscoveryService {
                     .timeout(
                       const Duration(milliseconds: 500),
                       onTimeout: (EventSink<TxtResourceRecord> sink) {
+                        debugPrint('  TXT 查询超时');
                         sink.close();
                       },
                     )
@@ -167,8 +178,9 @@ class DiscoveryService {
           debugPrint('处理服务记录失败：$e');
         }
       }
-    } catch (e) {
+    } catch (e, stackTrace) {
       debugPrint('mDNS 搜索失败：$e');
+      debugPrint('堆栈：$stackTrace');
     }
   }
 
