@@ -12,7 +12,6 @@ class Config:
     
     # mDNS 服务配置
     MDNS_SERVICE_TYPE = "_typing._tcp.local."
-    MDNS_SERVICE_NAME = f"打字助手-{platform.node()}"
     
     # 心跳配置
     HEARTBEAT_INTERVAL = 30  # 秒
