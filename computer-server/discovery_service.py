@@ -15,6 +15,7 @@ class DiscoveryService:
     def get_local_ip(self) -> str:
         """获取本机局域网 IP 地址"""
         try:
+            # 方法 1：使用 UDP 连接获取真实 IP
             s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
             s.settimeout(0)
             try:
@@ -24,9 +25,27 @@ class DiscoveryService:
                 ip = '127.0.0.1'
             finally:
                 s.close()
+            
+            # 排除 198.18.x.x (macOS NAT 网关)
+            if ip.startswith('198.18.'):
+                print(f"检测到 macOS NAT 地址 {ip}，尝试获取真实 IP...")
+                # 方法 2：遍历所有网络接口
+                import subprocess
+                try:
+                    result = subprocess.run(['ifconfig'], capture_output=True, text=True)
+                    lines = result.stdout.split('\n')
+                    for i, line in enumerate(lines):
+                        if 'inet ' in line and '192.168.' in line:
+                            parts = line.split()
+                            ip = parts[1]
+                            print(f"找到真实 IP: {ip}")
+                            break
+                except Exception as e:
+                    print(f"获取网络接口失败：{e}")
+            
             return ip
         except Exception as e:
-            print(f"获取本地 IP 失败: {e}")
+            print(f"获取本地 IP 失败：{e}")
             return '127.0.0.1'
     
     def _sanitize_name(self, name: str) -> str:
