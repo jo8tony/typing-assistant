@@ -723,9 +723,11 @@ class _HomeScreenState extends State<HomeScreen> {
                                             style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
                                             overflow: TextOverflow.ellipsis,
                                           ),
+                                          const SizedBox(height: 4),
                                           Text(
-                                            computer.ip,
+                                            '${computer.ip}:${computer.port}',
                                             style: const TextStyle(fontSize: 12, color: Colors.grey),
+                                            maxLines: 1,
                                           ),
                                         ],
                                       ),
