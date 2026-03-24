@@ -365,7 +365,6 @@ class _NetworkDiscoveryWidgetState extends State<NetworkDiscoveryWidget>
     final ipController = TextEditingController();
     final portController = TextEditingController(text: '${Constants.websocketPort}');
     final nameController = TextEditingController(text: '手动输入');
-    bool isTesting = false;
     bool? testSuccess;
     String? testMessage;
 
@@ -433,79 +432,68 @@ class _NetworkDiscoveryWidgetState extends State<NetworkDiscoveryWidget>
                   children: [
                     Expanded(
                       child: OutlinedButton.icon(
-                        onPressed: isTesting
-                            ? null
-                            : () async {
-                                final ip = ipController.text.trim();
+                        onPressed: () {
+                          final ip = ipController.text.trim();
+                          final port = int.tryParse(portController.text.trim()) ?? Constants.websocketPort;
+                          final name = nameController.text.trim().isEmpty ? '手动输入' : nameController.text.trim();
 
-                                if (ip.isEmpty) {
-                                  setDialogState(() {
-                                    testSuccess = false;
-                                    testMessage = '请输入IP地址';
-                                  });
-                                  return;
-                                }
+                          if (ip.isEmpty) {
+                            setDialogState(() {
+                              testSuccess = false;
+                              testMessage = '请输入IP地址';
+                            });
+                            return;
+                          }
 
-                                setDialogState(() {
-                                  isTesting = true;
-                                  testSuccess = null;
-                                  testMessage = null;
-                                });
+                          widget.discoveryService.addDeviceManually(
+                            ip,
+                            port,
+                            name: name,
+                          );
 
-                                await Future.delayed(const Duration(seconds: 1));
-
-                                setDialogState(() {
-                                  isTesting = false;
-                                  testSuccess = true;
-                                  testMessage = '设备信息已保存';
-                                });
-                              },
-                        icon: isTesting
-                            ? const SizedBox(
-                                width: 16,
-                                height: 16,
-                                child: CircularProgressIndicator(strokeWidth: 2),
-                              )
-                            : const Icon(Icons.check, size: 18),
-                        label: const Text('保存'),
+                          setDialogState(() {
+                            testSuccess = true;
+                            testMessage = '设备已添加到列表';
+                          });
+                        },
+                        icon: const Icon(Icons.add, size: 18),
+                        label: const Text('添加'),
                       ),
                     ),
                     const SizedBox(width: 8),
                     Expanded(
                       child: ElevatedButton.icon(
-                        onPressed: isTesting
-                            ? null
-                            : () {
-                                final ip = ipController.text.trim();
-                                final port = int.tryParse(portController.text.trim()) ?? Constants.websocketPort;
-                                final name = nameController.text.trim().isEmpty ? '手动输入' : nameController.text.trim();
+                        onPressed: () {
+                          final ip = ipController.text.trim();
+                          final port = int.tryParse(portController.text.trim()) ?? Constants.websocketPort;
+                          final name = nameController.text.trim().isEmpty ? '手动输入' : nameController.text.trim();
 
-                                if (ip.isEmpty) {
-                                  ScaffoldMessenger.of(context).showSnackBar(
-                                    const SnackBar(content: Text('请输入IP地址')),
-                                  );
-                                  return;
-                                }
+                          if (ip.isEmpty) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(content: Text('请输入IP地址')),
+                            );
+                            return;
+                          }
 
-                                widget.discoveryService.addDeviceManually(
-                                  ip,
-                                  port,
-                                  name: name,
-                                );
+                          widget.discoveryService.addDeviceManually(
+                            ip,
+                            port,
+                            name: name,
+                          );
 
-                                Navigator.pop(context);
+                          Navigator.pop(context);
 
-                                final device = DiscoveredDevice(
-                                  id: 'manual-${ip.hashCode}',
-                                  name: name,
-                                  ip: ip,
-                                  port: port,
-                                  platform: 'manual',
-                                  deviceType: 'manual',
-                                );
+                          final device = DiscoveredDevice(
+                            id: 'manual-${ip.hashCode}',
+                            name: name,
+                            ip: ip,
+                            port: port,
+                            platform: 'manual',
+                            deviceType: 'manual',
+                          );
 
-                                widget.onDeviceSelected(device);
-                              },
+                          widget.onDeviceSelected(device);
+                        },
                         icon: const Icon(Icons.link, size: 18),
                         label: const Text('连接'),
                         style: ElevatedButton.styleFrom(

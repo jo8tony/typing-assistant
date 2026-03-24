@@ -11,7 +11,6 @@ import '../services/local_send_discovery_service.dart';
 import '../services/ocr_service.dart';
 import '../services/text_history_service.dart';
 import '../widgets/connection_status.dart';
-import '../widgets/network_discovery_widget.dart';
 import '../utils/constants.dart';
 import 'ocr_screen.dart';
 

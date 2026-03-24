@@ -54,7 +54,6 @@ class LocalSendDiscoveryService {
   RawDatagramSocket? _multicastSocket;
   Timer? _announceTimer;
   Timer? _cleanupTimer;
-  Timer? _httpScanTimer;
   final _devicesController = StreamController<List<DiscoveredDevice>>.broadcast();
   final Map<String, DiscoveredDevice> _discoveredDevices = {};
   bool _isRunning = false;
@@ -93,7 +92,7 @@ class LocalSendDiscoveryService {
     _localIp = await _getLocalIp();
     debugPrint('本机 IP: $_localIp');
 
-    _startMulticastListener();
+    await _startMulticastListener();
 
     _announceTimer = Timer.periodic(const Duration(seconds: 2), (_) {
       if (_isRunning) {
@@ -105,38 +104,38 @@ class LocalSendDiscoveryService {
       _cleanupStaleDevices();
     });
 
-    _httpScanTimer = Timer(const Duration(milliseconds: 500), () {
-      if (_isRunning) {
-        _runHttpScan();
-      }
-    });
-
-    await Future.delayed(const Duration(seconds: 1));
     _sendProbeRequest();
+
+    await _runHttpScan();
 
     _isScanning = false;
     debugPrint('=== 网络发现初始化完成 ===');
   }
 
-  void _startMulticastListener() {
-    RawDatagramSocket.bind(InternetAddress.anyIPv4, multicastPort, reuseAddress: true, reusePort: true)
-        .then((socket) {
-      _multicastSocket = socket;
-      socket.broadcastEnabled = true;
+  Future<void> _startMulticastListener() async {
+    try {
+      _multicastSocket = await RawDatagramSocket.bind(
+        InternetAddress.anyIPv4,
+        multicastPort,
+        reuseAddress: true,
+        reusePort: true,
+      );
 
-      socket.listen((event) {
+      _multicastSocket!.broadcastEnabled = true;
+
+      _multicastSocket!.listen((event) {
         if (event == RawSocketEvent.read) {
-          final datagram = socket.receive();
+          final datagram = _multicastSocket!.receive();
           if (datagram != null) {
             _handleMulticastMessage(datagram);
           }
         }
       });
 
-      debugPrint('多播监听器已启动，端口: ${socket.port}');
-    }).catchError((e) {
+      debugPrint('多播监听器已启动，端口: ${_multicastSocket!.port}');
+    } catch (e) {
       debugPrint('启动多播监听器失败: $e');
-    });
+    }
   }
 
   void _handleMulticastMessage(Datagram datagram) {
@@ -345,8 +344,6 @@ class LocalSendDiscoveryService {
     _announceTimer = null;
     _cleanupTimer?.cancel();
     _cleanupTimer = null;
-    _httpScanTimer?.cancel();
-    _httpScanTimer = null;
 
     if (_multicastSocket != null) {
       try {
