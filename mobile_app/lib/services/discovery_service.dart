@@ -56,14 +56,15 @@ class DiscoveryService {
     try {
       debugPrint('正在启动 UDP 广播...');
       
+      // 绑定到一个随机端口用于接收
       _udpSocket = await RawDatagramSocket.bind(
         InternetAddress.anyIPv4,
         0,
-        reuseAddress: true,
-        reusePort: true,
       );
       
       _udpSocket!.broadcastEnabled = true;
+      
+      // 监听 UDP 消息
       _udpSocket!.listen((event) {
         if (event == RawSocketEvent.read) {
           final datagram = _udpSocket!.receive();
@@ -73,10 +74,12 @@ class DiscoveryService {
         }
       });
       
-      debugPrint('UDP socket 已启动');
+      debugPrint('UDP socket 已启动，端口：${_udpSocket!.port}');
       
+      // 立即发送查询
       unawaited(_sendBroadcastQuery());
       
+      // 定期发送查询
       _queryTimer = Timer.periodic(const Duration(seconds: 3), (_) {
         if (_isScanning) {
           unawaited(_sendBroadcastQuery());
@@ -102,13 +105,19 @@ class DiscoveryService {
         }
       });
 
-      debugPrint('发送广播查询...');
+      debugPrint('发送广播查询到端口 $broadcastPort...');
       
+      // 发送到广播地址
       _udpSocket!.send(
         utf8.encode(query),
-        InternetAddress.anyIPv4,
+        InternetAddress(
+          '255.255.255.255',
+          type: InternetAddressType.IPv4,
+        ),
         broadcastPort,
       );
+      
+      debugPrint('广播查询已发送');
       
     } catch (e) {
       debugPrint('发送广播失败：$e');

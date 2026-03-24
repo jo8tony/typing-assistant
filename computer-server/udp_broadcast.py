@@ -63,23 +63,28 @@ class UdpBroadcastService:
             print(f"  广播地址：{self.BROADCAST_ADDRESS}:{self.BROADCAST_PORT}")
             print(f"  服务器信息：{self.server_info}")
             
-            # 创建 UDP socket
+            # 创建两个 UDP socket：一个用于发送广播，一个用于接收查询
             self.broadcast_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
             self.broadcast_socket.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
-            
-            # 绑定到端口用于接收查询
-            self.broadcast_socket.bind(('', self.BROADCAST_PORT))
             self.broadcast_socket.settimeout(1.0)
+            
+            # 接收 socket 绑定到端口
+            self.receive_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            self.receive_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+            self.receive_socket.bind(('', self.BROADCAST_PORT))
+            self.receive_socket.settimeout(1.0)
             
             self.is_running = True
             
             # 启动广播线程
             broadcast_thread = threading.Thread(target=self._broadcast_loop, daemon=True)
             broadcast_thread.start()
+            print(f"  广播线程已启动")
             
             # 启动响应线程
             response_thread = threading.Thread(target=self._response_loop, daemon=True)
             response_thread.start()
+            print(f"  响应线程已启动")
             
             print(f"UDP 广播服务已启动")
             return True
@@ -92,6 +97,7 @@ class UdpBroadcastService:
     
     def _broadcast_loop(self):
         """定期广播服务器信息"""
+        print(f"  [广播线程] 开始定期广播...")
         while self.is_running:
             try:
                 message = json.dumps({
@@ -104,21 +110,25 @@ class UdpBroadcastService:
                     (self.BROADCAST_ADDRESS, self.BROADCAST_PORT)
                 )
                 
+                print(f"  [广播] 已发送广播：{self.server_info['name']} @ {self.server_info['ip']}")
+                
                 # 每 2 秒广播一次
                 time.sleep(2)
             except Exception as e:
                 if self.is_running:
-                    print(f"广播失败：{e}")
+                    print(f"  [广播] 失败：{e}")
     
     def _response_loop(self):
         """监听并响应查询请求"""
+        print(f"  [响应线程] 开始监听查询...")
         while self.is_running:
             try:
-                data, addr = self.broadcast_socket.recvfrom(1024)
+                data, addr = self.receive_socket.recvfrom(1024)
                 message = json.loads(data.decode('utf-8'))
                 
+                print(f"  [响应] 收到查询请求：{addr[0]}:{addr[1]}")
+                
                 if message.get('type') == 'query':
-                    print(f"收到查询请求：{addr}")
                     # 响应查询
                     response = json.dumps({
                         'type': 'response',
@@ -127,12 +137,13 @@ class UdpBroadcastService:
                     
                     # 单播响应给查询者
                     self.broadcast_socket.sendto(response, addr)
+                    print(f"  [响应] 已发送响应到 {addr[0]}:{addr[1]}")
                     
             except socket.timeout:
                 pass
             except Exception as e:
                 if self.is_running:
-                    print(f"处理查询失败：{e}")
+                    print(f"  [响应] 处理失败：{e}")
     
     def stop(self):
         """停止 UDP 广播服务"""
@@ -141,10 +152,19 @@ class UdpBroadcastService:
             try:
                 self.broadcast_socket.close()
             except Exception as e:
-                print(f"关闭 UDP socket 失败：{e}")
+                print(f"关闭广播 socket 失败：{e}")
             finally:
                 self.broadcast_socket = None
-                print("UDP 广播服务已停止")
+        
+        if self.receive_socket:
+            try:
+                self.receive_socket.close()
+            except Exception as e:
+                print(f"关闭接收 socket 失败：{e}")
+            finally:
+                self.receive_socket = None
+        
+        print("UDP 广播服务已停止")
 
 
 # 单例实例
