@@ -7,12 +7,15 @@ import 'package:permission_handler/permission_handler.dart';
 import 'package:provider/provider.dart';
 import 'package:device_info_plus/device_info_plus.dart';
 import '../services/websocket_service.dart';
-import '../services/discovery_service.dart';
+import '../services/local_send_discovery_service.dart';
 import '../services/ocr_service.dart';
 import '../services/text_history_service.dart';
 import '../widgets/connection_status.dart';
+import '../widgets/network_discovery_widget.dart';
 import '../utils/constants.dart';
 import 'ocr_screen.dart';
+
+typedef DiscoveredComputer = DiscoveredDevice;
 
 /// 主界面
 class HomeScreen extends StatefulWidget {
@@ -24,7 +27,7 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   final TextEditingController _textController = TextEditingController();
-  final DiscoveryService _discoveryService = DiscoveryService();
+  final LocalSendDiscoveryService _discoveryService = LocalSendDiscoveryService();
   final ImagePicker _imagePicker = ImagePicker();
   bool _isSending = false;
   bool _hasAutoConnected = false; // 标记是否已经尝试过自动连接

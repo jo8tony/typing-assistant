@@ -5,14 +5,20 @@ from pathlib import Path
 
 class Config:
     """配置管理类"""
-    
+
     # 服务器配置
     WEBSOCKET_HOST = "0.0.0.0"
     WEBSOCKET_PORT = 8765
-    
-    # mDNS 服务配置
-    MDNS_SERVICE_TYPE = "_typing._tcp.local."
-    
+
+    # LocalSend 风格网络发现配置
+    MULTICAST_ADDRESS = "224.0.0.167"
+    MULTICAST_PORT = 41317
+    MULTICAST_TTL = 1
+    DISCOVERY_HTTP_PORT = 41317
+
+    # API 版本
+    API_VERSION = "v2"
+
     # 心跳配置
     HEARTBEAT_INTERVAL = 30  # 秒
     HEARTBEAT_TIMEOUT = 60   # 秒

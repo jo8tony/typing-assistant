@@ -6,7 +6,9 @@ import 'package:web_socket_channel/web_socket_channel.dart';
 import 'package:web_socket_channel/io.dart';
 import '../models/connection_model.dart';
 import '../utils/constants.dart';
-import 'discovery_service.dart';
+import 'local_send_discovery_service.dart';
+
+typedef DiscoveredComputer = DiscoveredDevice;
 
 /// 超时异常
 class TimeoutException implements Exception {
@@ -47,6 +49,7 @@ class WebSocketService extends ChangeNotifier {
         debugPrint('发现保存的 IP: $savedIp:$savedPort');
         // 自动尝试连接（但不强制重连）
         final computer = DiscoveredComputer(
+          id: 'saved-${savedIp.hashCode}',
           name: '历史连接',
           ip: savedIp,
           port: savedPort,
@@ -182,6 +185,7 @@ class WebSocketService extends ChangeNotifier {
   /// 手动连接到指定 IP
   Future<bool> connectManually(String ip, int port) async {
     final computer = DiscoveredComputer(
+      id: 'manual-${ip.hashCode}',
       name: '手动输入',
       ip: ip,
       port: port,
@@ -368,6 +372,7 @@ debugPrint('WebSocket 连接已关闭');
     // 如果需要重连
     if (_shouldReconnect && _connectionModel.computerIp.isNotEmpty) {
       final computer = DiscoveredComputer(
+        id: 'reconnect-${_connectionModel.computerIp.hashCode}',
         name: _connectionModel.computerName,
         ip: _connectionModel.computerIp,
         port: Constants.websocketPort,
