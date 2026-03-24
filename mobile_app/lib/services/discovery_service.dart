@@ -2,7 +2,6 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/foundation.dart';
-import 'package:multicast_dns/multicast_dns.dart';
 import '../utils/constants.dart';
 
 class DiscoveredComputer {
@@ -23,11 +22,15 @@ class DiscoveredComputer {
 }
 
 class DiscoveryService {
-  MDnsClient? _client;
-  Timer? _searchTimer;
+  RawDatagramSocket? _udpSocket;
+  Timer? _broadcastTimer;
+  Timer? _queryTimer;
   final _computersController = StreamController<List<DiscoveredComputer>>.broadcast();
   final List<DiscoveredComputer> _discoveredComputers = [];
   bool _isScanning = false;
+
+  static const int broadcastPort = 8766;
+  static const Duration broadcastInterval = Duration(seconds: 2);
 
   Stream<List<DiscoveredComputer>> get computersStream => _computersController.stream;
   List<DiscoveredComputer> get discoveredComputers => List.unmodifiable(_discoveredComputers);
@@ -40,147 +43,101 @@ class DiscoveryService {
     _computersController.add([]);
 
     debugPrint('开始网络发现...');
-    debugPrint('mDNS 服务类型：${Constants.mdnsServiceType}');
+    debugPrint('UDP 广播端口：$broadcastPort');
 
-    final mdnsFuture = _startMdnsDiscovery();
-    final networkFuture = _startNetworkScan();
-    
-    await Future.wait([mdnsFuture, networkFuture]);
+    await _startUdpDiscovery();
+    await _startNetworkScan();
 
     _isScanning = false;
     debugPrint('网络发现完成，发现 ${_discoveredComputers.length} 个服务');
   }
 
-  Future<void> _startMdnsDiscovery() async {
+  Future<void> _startUdpDiscovery() async {
     try {
-      _client = MDnsClient();
-      debugPrint('正在启动 mDNS 客户端...');
-      await _client!.start();
-      debugPrint('mDNS 客户端已启动，准备查询...');
-
-      unawaited(_searchMdnsServices());
-
-      _searchTimer = Timer.periodic(const Duration(seconds: 3), (_) {
-        if (_isScanning && _client != null) {
-          unawaited(_searchMdnsServices());
+      debugPrint('正在启动 UDP 广播...');
+      
+      _udpSocket = await RawDatagramSocket.bind(
+        InternetAddress.anyIPv4,
+        0,
+        reuseAddress: true,
+        reusePort: true,
+      );
+      
+      _udpSocket!.broadcastEnabled = true;
+      _udpSocket!.listen((event) {
+        if (event == RawSocketEvent.read) {
+          final datagram = _udpSocket!.receive();
+          if (datagram != null) {
+            _handleUdpMessage(datagram);
+          }
         }
       });
+      
+      debugPrint('UDP socket 已启动');
+      
+      unawaited(_sendBroadcastQuery());
+      
+      _queryTimer = Timer.periodic(const Duration(seconds: 3), (_) {
+        if (_isScanning) {
+          unawaited(_sendBroadcastQuery());
+        }
+      });
+      
     } catch (e, stackTrace) {
-      debugPrint('mDNS 启动失败：$e');
+      debugPrint('UDP 启动失败：$e');
       debugPrint('堆栈：$stackTrace');
       rethrow;
     }
   }
 
-  Future<void> _searchMdnsServices() async {
-    if (_client == null) {
-      debugPrint('mDNS 客户端为 null，跳过搜索');
-      return;
-    }
+  Future<void> _sendBroadcastQuery() async {
+    if (_udpSocket == null) return;
 
     try {
-      debugPrint('开始 mDNS PTR 查询...');
-      debugPrint('  查询域名：${Constants.mdnsServiceType}');
-      
-      final ptrRecords = await _client!
-          .lookup<PtrResourceRecord>(
-            ResourceRecordQuery.serverPointer(Constants.mdnsServiceType),
-          )
-          .timeout(
-            const Duration(seconds: 3),
-            onTimeout: (EventSink<PtrResourceRecord> sink) {
-              debugPrint('PTR 查询超时');
-              sink.close();
-            },
-          )
-          .toList();
-      
-      debugPrint('mDNS PTR 查询完成，发现 ${ptrRecords.length} 个服务');
-      
-      if (ptrRecords.isEmpty) {
-        debugPrint('  提示：请确认电脑端服务已启动，并且手机和电脑在同一 WiFi 网络');
-      }
-      
-      for (final ptr in ptrRecords) {
-        try {
-          final serviceName = ptr.domainName;
-          debugPrint('发现服务：$serviceName');
-          
-          final srvRecords = await _client!
-              .lookup<SrvResourceRecord>(
-                ResourceRecordQuery.service(serviceName),
-              )
-              .timeout(
-                const Duration(seconds: 2),
-                onTimeout: (EventSink<SrvResourceRecord> sink) {
-                  debugPrint('  SRV 查询超时');
-                  sink.close();
-                },
-              )
-              .toList();
-          
-          for (final srv in srvRecords) {
-            debugPrint('  SRV: ${srv.target}:${srv.port}');
-            
-            final ipRecords = await _client!
-                .lookup<IPAddressResourceRecord>(
-                  ResourceRecordQuery.addressIPv4(srv.target),
-                )
-                .timeout(
-                  const Duration(milliseconds: 800),
-                  onTimeout: (EventSink<IPAddressResourceRecord> sink) {
-                    debugPrint('  IP 查询超时');
-                    sink.close();
-                  },
-                )
-                .toList();
-            
-            for (final ip in ipRecords) {
-              debugPrint('  IP: ${ip.address.address}');
-              
-              String platform = 'unknown';
-              try {
-                final txtRecords = await _client!
-                    .lookup<TxtResourceRecord>(
-                      ResourceRecordQuery.text(serviceName),
-                    )
-                    .timeout(
-                      const Duration(milliseconds: 500),
-                      onTimeout: (EventSink<TxtResourceRecord> sink) {
-                        debugPrint('  TXT 查询超时');
-                        sink.close();
-                      },
-                    )
-                    .toList();
-                
-                for (final txt in txtRecords) {
-                  final text = utf8.decode(txt.text as List<int>);
-                  debugPrint('  TXT: $text');
-                  if (text.contains('platform=')) {
-                    platform = text.split('platform=')[1].split(',')[0];
-                  }
-                }
-              } catch (e) {
-                debugPrint('  TXT 记录获取失败：$e');
-              }
+      final query = jsonEncode({
+        'type': 'query',
+        'data': {
+          'client': 'mobile',
+          'timestamp': DateTime.now().millisecondsSinceEpoch,
+        }
+      });
 
-              final computer = DiscoveredComputer(
-                name: serviceName.split('.')[0],
-                ip: ip.address.address,
-                port: srv.port,
-                platform: platform,
-              );
+      debugPrint('发送广播查询...');
+      
+      _udpSocket!.send(
+        utf8.encode(query),
+        InternetAddress.anyIPv4,
+        broadcastPort,
+      );
+      
+    } catch (e) {
+      debugPrint('发送广播失败：$e');
+    }
+  }
 
-              _addComputer(computer);
-            }
-          }
-        } catch (e) {
-          debugPrint('处理服务记录失败：$e');
+  void _handleUdpMessage(Datagram datagram) {
+    try {
+      final message = utf8.decode(datagram.data);
+      final data = jsonDecode(message);
+      
+      final type = data['type'];
+      
+      if (type == 'discovery' || type == 'response') {
+        final serverData = data['data'];
+        if (serverData != null) {
+          final computer = DiscoveredComputer(
+            name: serverData['name'] ?? '未知电脑',
+            ip: serverData['ip'] ?? datagram.address.address,
+            port: serverData['port'] ?? Constants.websocketPort,
+            platform: serverData['platform'] ?? 'unknown',
+          );
+          
+          debugPrint('收到${type == 'discovery' ? '广播' : '响应'}: ${computer.name} (${computer.ip})');
+          _addComputer(computer);
         }
       }
-    } catch (e, stackTrace) {
-      debugPrint('mDNS 搜索失败：$e');
-      debugPrint('堆栈：$stackTrace');
+    } catch (e) {
+      debugPrint('处理 UDP 消息失败：$e');
     }
   }
 
@@ -286,10 +243,12 @@ class DiscoveryService {
   }
 
   Future<void> stopDiscovery() async {
-    _searchTimer?.cancel();
-    _searchTimer = null;
-    _client?.stop();
-    _client = null;
+    _broadcastTimer?.cancel();
+    _broadcastTimer = null;
+    _queryTimer?.cancel();
+    _queryTimer = null;
+    _udpSocket?.close();
+    _udpSocket = null;
     _discoveredComputers.clear();
     _isScanning = false;
   }

@@ -16,6 +16,8 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from config import Config
 from websocket_server import get_server
 from discovery_service import get_discovery_service
+from udp_broadcast import get_udp_broadcast_service
+import platform
 
 # 全局标志，用于优雅退出
 running = True
@@ -43,11 +45,20 @@ async def main():
     # 获取服务实例
     server = get_server()
     discovery = get_discovery_service()
+    udp_broadcast = get_udp_broadcast_service()
+    
+    # 生成服务器名称
+    hostname = platform.node()
+    server_name = f"打字助手-{hostname}"
     
     # 启动 mDNS 发现服务
     if not discovery.start():
-        print("警告: mDNS 服务启动失败，手机可能无法自动发现电脑")
+        print("警告：mDNS 服务启动失败，手机可能无法自动发现电脑")
         print("请手动输入电脑 IP 地址进行连接")
+    
+    # 启动 UDP 广播服务
+    if not udp_broadcast.start(server_name):
+        print("警告：UDP 广播服务启动失败")
     
     print()
     
@@ -60,6 +71,7 @@ async def main():
         # 清理资源
         server.stop()
         discovery.stop()
+        udp_broadcast.stop()
         print("服务已完全关闭")
 
 def run_with_tray():
