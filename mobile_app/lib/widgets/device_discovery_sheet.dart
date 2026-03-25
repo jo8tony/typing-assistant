@@ -1,10 +1,9 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import '../services/local_send_discovery_service.dart';
-import '../utils/constants.dart';
 
 class DeviceDiscoverySheet extends StatefulWidget {
-  final LocalSendDiscoveryService discoveryService;
+  final DiscoveryService discoveryService;
   final Function(DiscoveredDevice) onDeviceSelected;
   final String? currentConnectedIp;
 
@@ -17,7 +16,7 @@ class DeviceDiscoverySheet extends StatefulWidget {
 
   static Future<void> show({
     required BuildContext context,
-    required LocalSendDiscoveryService discoveryService,
+    required DiscoveryService discoveryService,
     required Function(DiscoveredDevice) onDeviceSelected,
     String? currentConnectedIp,
   }) {
@@ -26,9 +25,9 @@ class DeviceDiscoverySheet extends StatefulWidget {
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
       builder: (context) => DraggableScrollableSheet(
-        initialChildSize: 0.7,
+        initialChildSize: 0.75,
         minChildSize: 0.5,
-        maxChildSize: 0.9,
+        maxChildSize: 0.95,
         builder: (context, scrollController) => DeviceDiscoverySheet(
           discoveryService: discoveryService,
           onDeviceSelected: onDeviceSelected,
@@ -45,12 +44,11 @@ class DeviceDiscoverySheet extends StatefulWidget {
 class _DeviceDiscoverySheetState extends State<DeviceDiscoverySheet> {
   StreamSubscription<List<DiscoveredDevice>>? _subscription;
   final TextEditingController _ipController = TextEditingController();
-  final TextEditingController _portController = TextEditingController(text: '${Constants.websocketPort}');
-  final TextEditingController _nameController = TextEditingController();
+  final TextEditingController _portController =
+      TextEditingController(text: '${DiscoveryConstants.websocketPort}');
   final FocusNode _ipFocusNode = FocusNode();
   final FocusNode _portFocusNode = FocusNode();
-  
-  DiscoveryMethod _selectedMethod = DiscoveryMethod.multicast;
+
   bool _isRefreshing = false;
 
   @override
@@ -66,27 +64,19 @@ class _DeviceDiscoverySheetState extends State<DeviceDiscoverySheet> {
     _subscription?.cancel();
     _ipController.dispose();
     _portController.dispose();
-    _nameController.dispose();
     _ipFocusNode.dispose();
     _portFocusNode.dispose();
     super.dispose();
   }
 
   Future<void> _handleRefresh() async {
-    if (_isRefreshing) {
-      debugPrint('已经在刷新中，跳过');
-      return;
-    }
-    
-    debugPrint('开始重新扫描...');
+    if (_isRefreshing) return;
+
     setState(() => _isRefreshing = true);
-    
+
     try {
       await widget.discoveryService.restartDiscovery();
-      debugPrint('重新扫描完成');
-      
       if (mounted) {
-        setState(() {});
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text('已重新扫描'),
@@ -95,7 +85,6 @@ class _DeviceDiscoverySheetState extends State<DeviceDiscoverySheet> {
         );
       }
     } catch (e) {
-      debugPrint('重新扫描失败: $e');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -119,7 +108,7 @@ class _DeviceDiscoverySheetState extends State<DeviceDiscoverySheet> {
     return Container(
       decoration: const BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
       child: Column(
         children: [
@@ -127,20 +116,27 @@ class _DeviceDiscoverySheetState extends State<DeviceDiscoverySheet> {
           Expanded(
             child: SingleChildScrollView(
               padding: EdgeInsets.only(
-                left: 16,
-                right: 16,
+                left: 20,
+                right: 20,
                 top: 16,
-                bottom: MediaQuery.of(context).viewInsets.bottom + 16,
+                bottom: MediaQuery.of(context).viewInsets.bottom + 20,
               ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  _buildScanningStatus(isScanning, devices.length),
-                  const SizedBox(height: 16),
+                  _buildStatusCard(isScanning, devices.length),
+                  const SizedBox(height: 20),
                   if (devices.isNotEmpty) ...[
-                    _buildDeviceList(devices),
-                    const SizedBox(height: 16),
+                    _buildSectionTitle('发现的设备', devices.length),
+                    const SizedBox(height: 12),
+                    ...devices.map((device) => Padding(
+                          padding: const EdgeInsets.only(bottom: 10),
+                          child: _buildDeviceCard(device),
+                        )),
+                    const SizedBox(height: 20),
                   ],
+                  _buildSectionTitle('手动连接', null),
+                  const SizedBox(height: 12),
                   _buildManualInput(),
                 ],
               ),
@@ -153,10 +149,17 @@ class _DeviceDiscoverySheetState extends State<DeviceDiscoverySheet> {
 
   Widget _buildHeader(bool isScanning) {
     return Container(
-      padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+      padding: const EdgeInsets.fromLTRB(20, 12, 20, 16),
       decoration: BoxDecoration(
-        color: Colors.blue.shade50,
-        borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            Colors.blue.shade600,
+            Colors.blue.shade700,
+          ],
+        ),
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
       ),
       child: Column(
         children: [
@@ -164,42 +167,44 @@ class _DeviceDiscoverySheetState extends State<DeviceDiscoverySheet> {
             width: 40,
             height: 4,
             decoration: BoxDecoration(
-              color: Colors.grey.shade300,
+              color: Colors.white.withValues(alpha: 0.3),
               borderRadius: BorderRadius.circular(2),
             ),
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: 16),
           Row(
             children: [
               Container(
-                padding: const EdgeInsets.all(8),
+                padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
-                  color: Colors.blue.shade100,
-                  borderRadius: BorderRadius.circular(8),
+                  color: Colors.white.withValues(alpha: 0.2),
+                  borderRadius: BorderRadius.circular(12),
                 ),
-                child: Icon(
+                child: const Icon(
                   Icons.devices,
-                  color: Colors.blue.shade700,
+                  color: Colors.white,
                   size: 24,
                 ),
               ),
-              const SizedBox(width: 12),
-              const Expanded(
+              const SizedBox(width: 16),
+              Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
+                    const Text(
                       '发现设备',
                       style: TextStyle(
-                        fontSize: 18,
+                        fontSize: 20,
                         fontWeight: FontWeight.bold,
+                        color: Colors.white,
                       ),
                     ),
+                    const SizedBox(height: 2),
                     Text(
-                      'LocalSend 风格网络发现',
+                      'LocalSend 风格 · 多播发现',
                       style: TextStyle(
-                        fontSize: 12,
-                        color: Colors.grey,
+                        fontSize: 13,
+                        color: Colors.white.withValues(alpha: 0.8),
                       ),
                     ),
                   ],
@@ -207,10 +212,11 @@ class _DeviceDiscoverySheetState extends State<DeviceDiscoverySheet> {
               ),
               if (isScanning)
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                   decoration: BoxDecoration(
-                    color: Colors.orange.shade100,
-                    borderRadius: BorderRadius.circular(16),
+                    color: Colors.white.withValues(alpha: 0.2),
+                    borderRadius: BorderRadius.circular(20),
                   ),
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
@@ -220,15 +226,15 @@ class _DeviceDiscoverySheetState extends State<DeviceDiscoverySheet> {
                         height: 12,
                         child: CircularProgressIndicator(
                           strokeWidth: 2,
-                          color: Colors.orange.shade700,
+                          color: Colors.white,
                         ),
                       ),
-                      const SizedBox(width: 6),
-                      Text(
+                      const SizedBox(width: 8),
+                      const Text(
                         '扫描中',
                         style: TextStyle(
                           fontSize: 12,
-                          color: Colors.orange.shade700,
+                          color: Colors.white,
                           fontWeight: FontWeight.w500,
                         ),
                       ),
@@ -242,166 +248,137 @@ class _DeviceDiscoverySheetState extends State<DeviceDiscoverySheet> {
     );
   }
 
-  Widget _buildScanningStatus(bool isScanning, int deviceCount) {
+  Widget _buildStatusCard(bool isScanning, int deviceCount) {
     return Container(
-      padding: const EdgeInsets.all(12),
+      padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: Colors.grey.shade100,
-        borderRadius: BorderRadius.circular(12),
+        color: deviceCount > 0
+            ? Colors.green.shade50
+            : isScanning
+                ? Colors.blue.shade50
+                : Colors.orange.shade50,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: deviceCount > 0
+              ? Colors.green.shade200
+              : isScanning
+                  ? Colors.blue.shade200
+                  : Colors.orange.shade200,
+        ),
       ),
-      child: Column(
+      child: Row(
         children: [
-          Row(
-            children: [
-              _buildMethodChip(
-                Icons.hub,
-                'UDP多播',
-                method: DiscoveryMethod.multicast,
-              ),
-              const SizedBox(width: 8),
-              _buildMethodChip(
-                Icons.wifi,
-                'HTTP扫描',
-                method: DiscoveryMethod.httpScan,
-              ),
-              const SizedBox(width: 8),
-              _buildMethodChip(
-                Icons.edit,
-                '手动输入',
-                method: DiscoveryMethod.manual,
-              ),
-            ],
+          Container(
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(
+              color: deviceCount > 0
+                  ? Colors.green.shade100
+                  : isScanning
+                      ? Colors.blue.shade100
+                      : Colors.orange.shade100,
+              shape: BoxShape.circle,
+            ),
+            child: Icon(
+              deviceCount > 0
+                  ? Icons.check_circle
+                  : isScanning
+                      ? Icons.search
+                      : Icons.info_outline,
+              size: 24,
+              color: deviceCount > 0
+                  ? Colors.green.shade600
+                  : isScanning
+                      ? Colors.blue.shade600
+                      : Colors.orange.shade600,
+            ),
           ),
-          const SizedBox(height: 12),
-          Row(
-            children: [
-              Icon(
-                deviceCount > 0 ? Icons.check_circle : Icons.info_outline,
-                size: 16,
-                color: deviceCount > 0 ? Colors.green : Colors.grey,
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Text(
+          const SizedBox(width: 14),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
                   deviceCount > 0
                       ? '已发现 $deviceCount 台设备'
                       : isScanning
                           ? '正在扫描局域网...'
-                          : '未发现设备，请检查网络或手动输入',
+                          : '未发现设备',
                   style: TextStyle(
-                    fontSize: 14,
-                    color: deviceCount > 0 ? Colors.green.shade700 : Colors.grey.shade700,
+                    fontSize: 15,
+                    fontWeight: FontWeight.w600,
+                    color: deviceCount > 0
+                        ? Colors.green.shade700
+                        : isScanning
+                            ? Colors.blue.shade700
+                            : Colors.orange.shade700,
                   ),
                 ),
-              ),
-            ],
-          ),
-          if (deviceCount == 0 && !isScanning) ...[
-            const SizedBox(height: 12),
-            SizedBox(
-              width: double.infinity,
-              child: ElevatedButton.icon(
-                onPressed: _isRefreshing ? null : _handleRefresh,
-                icon: _isRefreshing
-                    ? const SizedBox(
-                        width: 16,
-                        height: 16,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                          color: Colors.white,
-                        ),
-                      )
-                    : const Icon(Icons.refresh, size: 18),
-                label: Text(_isRefreshing ? '刷新中...' : '重新扫描'),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.blue,
-                  foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(vertical: 10),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(8),
+                const SizedBox(height: 2),
+                Text(
+                  deviceCount > 0
+                      ? '点击设备卡片进行连接'
+                      : isScanning
+                          ? '请稍候，正在搜索附近的设备'
+                          : '请检查网络或手动输入 IP 地址',
+                  style: TextStyle(
+                    fontSize: 13,
+                    color: Colors.grey.shade600,
                   ),
                 ),
-              ),
+              ],
             ),
-          ],
+          ),
+          if (!isScanning)
+            IconButton(
+              onPressed: _isRefreshing ? null : _handleRefresh,
+              icon: _isRefreshing
+                  ? SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: Colors.blue.shade600,
+                      ),
+                    )
+                  : Icon(
+                      Icons.refresh,
+                      color: Colors.blue.shade600,
+                    ),
+              tooltip: '重新扫描',
+            ),
         ],
       ),
     );
   }
 
-  Widget _buildMethodChip(IconData icon, String label, {required DiscoveryMethod method}) {
-    final isSelected = _selectedMethod == method;
-    
-    return Expanded(
-      child: GestureDetector(
-        onTap: () {
-          setState(() {
-            _selectedMethod = method;
-          });
-          
-          if (method == DiscoveryMethod.multicast || method == DiscoveryMethod.httpScan) {
-            _handleRefresh();
-          }
-        },
-        child: Container(
-          padding: const EdgeInsets.symmetric(vertical: 8),
-          decoration: BoxDecoration(
-            color: isSelected ? Colors.blue.shade100 : Colors.grey.shade200,
-            borderRadius: BorderRadius.circular(8),
-            border: isSelected ? Border.all(color: Colors.blue.shade300, width: 2) : null,
-          ),
-          child: Column(
-            children: [
-              Icon(
-                icon,
-                size: 20,
-                color: isSelected ? Colors.blue.shade700 : Colors.grey,
-              ),
-              const SizedBox(height: 4),
-              Text(
-                label,
-                style: TextStyle(
-                  fontSize: 11,
-                  color: isSelected ? Colors.blue.shade700 : Colors.grey,
-                  fontWeight: isSelected ? FontWeight.w500 : FontWeight.normal,
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildDeviceList(List<DiscoveredDevice> devices) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
+  Widget _buildSectionTitle(String title, int? count) {
+    return Row(
       children: [
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            const Text(
-              '发现的设备',
+        Text(
+          title,
+          style: const TextStyle(
+            fontSize: 16,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+        if (count != null) ...[
+          const SizedBox(width: 8),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+            decoration: BoxDecoration(
+              color: Colors.blue.shade100,
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Text(
+              '$count',
               style: TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.bold,
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+                color: Colors.blue.shade700,
               ),
             ),
-            TextButton.icon(
-              onPressed: _isRefreshing ? null : _handleRefresh,
-              icon: _isRefreshing
-                  ? const SizedBox(
-                      width: 16,
-                      height: 16,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
-                  : const Icon(Icons.refresh, size: 18),
-              label: Text(_isRefreshing ? '刷新中...' : '刷新'),
-            ),
-          ],
-        ),
-        const SizedBox(height: 8),
-        ...devices.map((device) => _buildDeviceCard(device)),
+          ),
+        ],
       ],
     );
   }
@@ -411,29 +388,34 @@ class _DeviceDiscoverySheetState extends State<DeviceDiscoverySheet> {
 
     IconData deviceIcon;
     Color iconColor;
+    Color bgColor;
 
     if (device.deviceType == 'mobile') {
       deviceIcon = Icons.smartphone;
-      iconColor = Colors.blue;
-    } else if (device.platform == 'macos' || device.platform == 'darwin') {
+      iconColor = Colors.blue.shade600;
+      bgColor = Colors.blue.shade50;
+    } else if (device.deviceType == 'macos' || device.deviceType == 'darwin') {
       deviceIcon = Icons.apple;
       iconColor = Colors.grey.shade800;
-    } else if (device.platform == 'windows') {
+      bgColor = Colors.grey.shade100;
+    } else if (device.deviceType == 'windows') {
       deviceIcon = Icons.desktop_windows;
       iconColor = Colors.blue.shade700;
-    } else if (device.platform == 'linux') {
+      bgColor = Colors.blue.shade50;
+    } else if (device.deviceType == 'linux') {
       deviceIcon = Icons.computer;
-      iconColor = Colors.orange;
+      iconColor = Colors.orange.shade600;
+      bgColor = Colors.orange.shade50;
     } else {
       deviceIcon = Icons.computer;
-      iconColor = Colors.grey.shade700;
+      iconColor = Colors.grey.shade600;
+      bgColor = Colors.grey.shade100;
     }
 
     return Container(
-      margin: const EdgeInsets.only(bottom: 8),
       decoration: BoxDecoration(
         color: isConnected ? Colors.green.shade50 : Colors.white,
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(16),
         border: Border.all(
           color: isConnected ? Colors.green.shade300 : Colors.grey.shade200,
           width: isConnected ? 2 : 1,
@@ -441,7 +423,7 @@ class _DeviceDiscoverySheetState extends State<DeviceDiscoverySheet> {
         boxShadow: [
           BoxShadow(
             color: Colors.grey.shade100,
-            blurRadius: 4,
+            blurRadius: 8,
             offset: const Offset(0, 2),
           ),
         ],
@@ -449,24 +431,24 @@ class _DeviceDiscoverySheetState extends State<DeviceDiscoverySheet> {
       child: Material(
         color: Colors.transparent,
         child: InkWell(
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: BorderRadius.circular(16),
           onTap: () {
             Navigator.pop(context);
             widget.onDeviceSelected(device);
           },
           child: Padding(
-            padding: const EdgeInsets.all(12),
+            padding: const EdgeInsets.all(14),
             child: Row(
               children: [
                 Container(
-                  padding: const EdgeInsets.all(10),
+                  padding: const EdgeInsets.all(12),
                   decoration: BoxDecoration(
-                    color: iconColor.withOpacity(0.1),
-                    borderRadius: BorderRadius.circular(10),
+                    color: isConnected ? Colors.green.shade100 : bgColor,
+                    borderRadius: BorderRadius.circular(12),
                   ),
-                  child: Icon(deviceIcon, color: iconColor, size: 24),
+                  child: Icon(deviceIcon, color: iconColor, size: 26),
                 ),
-                const SizedBox(width: 12),
+                const SizedBox(width: 14),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -475,7 +457,7 @@ class _DeviceDiscoverySheetState extends State<DeviceDiscoverySheet> {
                         children: [
                           Expanded(
                             child: Text(
-                              device.name,
+                              device.alias,
                               style: const TextStyle(
                                 fontSize: 15,
                                 fontWeight: FontWeight.w600,
@@ -485,9 +467,10 @@ class _DeviceDiscoverySheetState extends State<DeviceDiscoverySheet> {
                           ),
                           if (isConnected)
                             Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 8, vertical: 3),
                               decoration: BoxDecoration(
-                                color: Colors.green,
+                                color: Colors.green.shade500,
                                 borderRadius: BorderRadius.circular(10),
                               ),
                               child: const Text(
@@ -502,17 +485,44 @@ class _DeviceDiscoverySheetState extends State<DeviceDiscoverySheet> {
                         ],
                       ),
                       const SizedBox(height: 4),
-                      Text(
-                        '${device.ip}:${device.port}',
-                        style: TextStyle(
-                          fontSize: 13,
-                          color: Colors.grey.shade600,
-                        ),
+                      Row(
+                        children: [
+                          Icon(
+                            Icons.wifi,
+                            size: 14,
+                            color: Colors.grey.shade500,
+                          ),
+                          const SizedBox(width: 4),
+                          Text(
+                            '${device.ip}:${device.port}',
+                            style: TextStyle(
+                              fontSize: 13,
+                              color: Colors.grey.shade600,
+                            ),
+                          ),
+                          if (device.deviceModel.isNotEmpty) ...[
+                            const SizedBox(width: 8),
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 6, vertical: 2),
+                              decoration: BoxDecoration(
+                                color: Colors.grey.shade200,
+                                borderRadius: BorderRadius.circular(4),
+                              ),
+                              child: Text(
+                                device.deviceModel,
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  color: Colors.grey.shade600,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ],
                       ),
                     ],
                   ),
                 ),
-                const SizedBox(width: 8),
                 if (!isConnected)
                   Container(
                     padding: const EdgeInsets.all(8),
@@ -522,8 +532,8 @@ class _DeviceDiscoverySheetState extends State<DeviceDiscoverySheet> {
                     ),
                     child: Icon(
                       Icons.arrow_forward_ios,
-                      size: 16,
-                      color: Colors.blue.shade700,
+                      size: 14,
+                      color: Colors.blue.shade600,
                     ),
                   ),
               ],
@@ -535,109 +545,101 @@ class _DeviceDiscoverySheetState extends State<DeviceDiscoverySheet> {
   }
 
   Widget _buildManualInput() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const Text(
-          '手动输入',
-          style: TextStyle(
-            fontSize: 16,
-            fontWeight: FontWeight.bold,
-          ),
-        ),
-        const SizedBox(height: 12),
-        Container(
-          padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(
-            color: Colors.grey.shade50,
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: Colors.grey.shade200),
-          ),
-          child: Column(
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.grey.shade50,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: Colors.grey.shade200),
+      ),
+      child: Column(
+        children: [
+          Row(
             children: [
-              Row(
-                children: [
-                  Expanded(
-                    flex: 2,
-                    child: TextField(
-                      controller: _ipController,
-                      focusNode: _ipFocusNode,
-                      keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                      textInputAction: TextInputAction.next,
-                      decoration: InputDecoration(
-                        labelText: 'IP地址',
-                        hintText: '192.168.1.100',
-                        labelStyle: const TextStyle(fontSize: 14),
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-                      ),
+              Expanded(
+                flex: 2,
+                child: TextField(
+                  controller: _ipController,
+                  focusNode: _ipFocusNode,
+                  keyboardType: const TextInputType.numberWithOptions(
+                      decimal: true),
+                  textInputAction: TextInputAction.next,
+                  decoration: InputDecoration(
+                    labelText: 'IP 地址',
+                    hintText: '192.168.1.100',
+                    labelStyle: const TextStyle(fontSize: 14),
+                    prefixIcon: Icon(Icons.computer, size: 20),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
                     ),
+                    contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 12, vertical: 14),
                   ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: TextField(
-                      controller: _portController,
-                      focusNode: _portFocusNode,
-                      keyboardType: TextInputType.number,
-                      textInputAction: TextInputAction.done,
-                      decoration: InputDecoration(
-                        labelText: '端口',
-                        hintText: '8765',
-                        labelStyle: const TextStyle(fontSize: 14),
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-                      ),
-                    ),
-                  ),
-                ],
+                ),
               ),
-              const SizedBox(height: 12),
-              SizedBox(
-                width: double.infinity,
-                child: ElevatedButton.icon(
-                  onPressed: () {
-                    final ip = _ipController.text.trim();
-                    final port = int.tryParse(_portController.text.trim()) ?? Constants.websocketPort;
-
-                    if (ip.isEmpty) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('请输入IP地址')),
-                      );
-                      return;
-                    }
-
-                    final device = DiscoveredDevice(
-                      id: 'manual-${ip.hashCode}',
-                      name: '手动输入 ($ip)',
-                      ip: ip,
-                      port: port,
-                      platform: 'manual',
-                      deviceType: 'manual',
-                    );
-
-                    Navigator.pop(context);
-                    widget.onDeviceSelected(device);
-                  },
-                  icon: const Icon(Icons.link, size: 18),
-                  label: const Text('连接'),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.blue,
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(vertical: 12),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(8),
+              const SizedBox(width: 12),
+              Expanded(
+                child: TextField(
+                  controller: _portController,
+                  focusNode: _portFocusNode,
+                  keyboardType: TextInputType.number,
+                  textInputAction: TextInputAction.done,
+                  decoration: InputDecoration(
+                    labelText: '端口',
+                    hintText: '8765',
+                    labelStyle: const TextStyle(fontSize: 14),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
                     ),
+                    contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 12, vertical: 14),
                   ),
                 ),
               ),
             ],
           ),
-        ),
-      ],
+          const SizedBox(height: 14),
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton.icon(
+              onPressed: () {
+                final ip = _ipController.text.trim();
+                final port = int.tryParse(_portController.text.trim()) ??
+                    DiscoveryConstants.websocketPort;
+
+                if (ip.isEmpty) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('请输入 IP 地址')),
+                  );
+                  return;
+                }
+
+                final device = DiscoveredDevice(
+                  fingerprint: 'manual-${ip.hashCode}',
+                  alias: '手动连接 ($ip)',
+                  ip: ip,
+                  port: port,
+                  deviceModel: '',
+                  deviceType: 'manual',
+                );
+
+                Navigator.pop(context);
+                widget.onDeviceSelected(device);
+              },
+              icon: const Icon(Icons.link, size: 18),
+              label: const Text('连接'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.blue.shade600,
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(vertical: 14),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

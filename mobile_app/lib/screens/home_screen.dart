@@ -18,7 +18,6 @@ import 'ocr_screen.dart';
 
 typedef DiscoveredComputer = DiscoveredDevice;
 
-/// 主界面
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
 
@@ -28,13 +27,13 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   final TextEditingController _textController = TextEditingController();
-  final LocalSendDiscoveryService _discoveryService = LocalSendDiscoveryService();
+  final DiscoveryService _discoveryService = DiscoveryService();
   final ImagePicker _imagePicker = ImagePicker();
   bool _isSending = false;
-  bool _hasAutoConnected = false; // 标记是否已经尝试过自动连接
-  bool _isShowingServerList = false; // 标记是否正在显示服务器列表
-  Timer? _discoveryTimer; // 延迟检测定时器
-  List<DiscoveredComputer> _lastDiscoveredComputers = []; // 上次检测到的服务列表
+  bool _hasAutoConnected = false;
+  bool _isShowingServerList = false;
+  Timer? _discoveryTimer;
+  List<DiscoveredComputer> _lastDiscoveredComputers = [];
 
   @override
   void initState() {
@@ -49,10 +48,9 @@ class _HomeScreenState extends State<HomeScreen> {
     super.dispose();
   }
 
-  /// 显示历史记录对话框
   void _showHistoryDialog() {
     final historyService = context.read<TextHistoryService>();
-    
+
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
@@ -70,19 +68,19 @@ class _HomeScreenState extends State<HomeScreen> {
         ),
         content: SizedBox(
           width: double.maxFinite,
-          height: 320, // 固定高度，约可显示8行
+          height: 320,
           child: Consumer<TextHistoryService>(
             builder: (context, service, child) {
               if (service.isLoading) {
                 return const Center(child: CircularProgressIndicator());
               }
-              
+
               if (service.history.isEmpty) {
                 return const Center(
                   child: Text('暂无历史记录'),
                 );
               }
-              
+
               return ListView.separated(
                 itemCount: service.history.length,
                 separatorBuilder: (context, index) => const Divider(height: 1),
@@ -103,7 +101,6 @@ class _HomeScreenState extends State<HomeScreen> {
                       },
                     ),
                     onTap: () {
-                      // 将选中的历史记录追加到输入框（直接追加，不换行）
                       final currentText = _textController.text;
                       _textController.text = currentText + text;
                       Navigator.pop(context);
@@ -126,53 +123,41 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  /// 初始化发现服务
   Future<void> _initDiscovery() async {
     await _discoveryService.startDiscovery();
 
-    // 监听发现的电脑
     _discoveryService.computersStream.listen((computers) {
       if (!mounted) return;
 
       final wsService = context.read<WebSocketService>();
 
-      // 如果已经连接或正在连接，不处理
       if (wsService.connectionModel.isConnected ||
           wsService.connectionModel.isConnecting) {
         return;
       }
 
-      // 如果已经自动连接过，不再处理
       if (_hasAutoConnected) return;
 
-      // 更新检测到的服务列表
       _lastDiscoveredComputers = computers;
 
-      // 取消之前的定时器（如果有）
       _discoveryTimer?.cancel();
 
       if (computers.isEmpty) {
-        // 没有发现服务，不处理
         return;
       }
 
-      // 延迟 2 秒后再决定是否连接，确保检测到所有服务
       _discoveryTimer = Timer(const Duration(seconds: 2), () {
         if (!mounted) return;
 
-        // 如果已经连接或正在连接，不处理
         if (wsService.connectionModel.isConnected ||
             wsService.connectionModel.isConnecting) {
           return;
         }
 
-        // 如果已经自动连接过，不再处理
         if (_hasAutoConnected) return;
 
-        // 标记已经尝试过自动连接
         _hasAutoConnected = true;
 
-        // 使用最新的检测结果
         final currentComputers = _lastDiscoveredComputers;
 
         if (currentComputers.isEmpty) {
@@ -180,12 +165,10 @@ class _HomeScreenState extends State<HomeScreen> {
         }
 
         if (currentComputers.length == 1) {
-          // 只有一个服务，自动连接
           debugPrint('发现唯一服务，自动连接: ${currentComputers.first.ip}');
           wsService.connect(currentComputers.first, autoReconnect: true);
-          _showSnackBar('已自动连接到 ${currentComputers.first.name}', isError: false);
+          _showSnackBar('已自动连接到 ${currentComputers.first.alias}', isError: false);
         } else {
-          // 多个服务，显示选择对话框
           debugPrint('发现多个服务，显示选择对话框: ${currentComputers.length} 个');
           _showServerSelectionDialog(currentComputers);
         }
@@ -193,7 +176,6 @@ class _HomeScreenState extends State<HomeScreen> {
     });
   }
 
-  /// 发送文字
   Future<void> _sendText() async {
     final text = _textController.text.trim();
     if (text.isEmpty) {
@@ -211,13 +193,12 @@ class _HomeScreenState extends State<HomeScreen> {
 
     try {
       await wsService.sendText(text);
-      
-      // 保存到历史记录
+
       if (mounted) {
         final historyService = context.read<TextHistoryService>();
         historyService.addHistory(text);
       }
-      
+
       _textController.clear();
       _showSnackBar('发送成功！', isError: false);
     } catch (e) {
@@ -227,11 +208,10 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
-  /// 检查并请求存储权限
   Future<bool> _requestStoragePermission() async {
     final deviceInfo = DeviceInfoPlugin();
     final androidInfo = await deviceInfo.androidInfo;
-    
+
     if (androidInfo.version.sdkInt >= 33) {
       final status = await Permission.photos.request();
       if (status.isGranted) {
@@ -265,7 +245,6 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
-  /// 显示权限设置对话框
   void _showPermissionSettingsDialog(String permissionName) {
     showDialog(
       context: context,
@@ -289,7 +268,6 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  /// 拍照识别
   Future<void> _takePhoto() async {
     try {
       final cameraStatus = await Permission.camera.request();
@@ -329,7 +307,6 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
-  /// 从相册选择
   Future<void> _pickFromGallery() async {
     try {
       final storageGranted = await _requestStoragePermission();
@@ -358,20 +335,18 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
-  /// 处理图片进行 OCR
   Future<void> _processImage(String imagePath) async {
     if (!mounted) return;
 
     final ocrService = context.read<OcrService>();
 
     BuildContext? dialogContext;
-    
+
     try {
       debugPrint('开始 OCR 识别: $imagePath');
-      
+
       if (!mounted) return;
-      
-      if (!mounted) return;
+
       showDialog(
         context: context,
         barrierDismissible: false,
@@ -384,17 +359,17 @@ class _HomeScreenState extends State<HomeScreen> {
       );
 
       final file = File(imagePath);
-      
+
       final exists = await file.exists();
       debugPrint('文件存在: $exists');
-      
+
       if (!exists) {
         throw Exception('图片文件不存在: $imagePath');
       }
-      
+
       final fileSize = await file.length();
       debugPrint('文件大小: $fileSize bytes');
-      
+
       if (fileSize == 0) {
         throw Exception('图片文件为空');
       }
@@ -402,7 +377,6 @@ class _HomeScreenState extends State<HomeScreen> {
       final blocks = await ocrService.recognizeText(file);
       debugPrint('OCR 识别完成，结果数量：${blocks.length}');
 
-      // ignore: use_build_context_synchronously
       if (dialogContext != null && dialogContext!.mounted) {
         Navigator.pop(dialogContext!);
       }
@@ -415,17 +389,15 @@ class _HomeScreenState extends State<HomeScreen> {
       }
 
       if (!mounted) return;
-      // 使用 await 获取 OCR 屏幕返回的结果
       final result = await Navigator.push(
         context,
         MaterialPageRoute(
           builder: (context) => OcrScreen(
             textBlocks: blocks,
-            onSend: (_) {}, // 通过 Navigator.pop 返回结果，此回调不再使用
+            onSend: (_) {},
           ),
         ),
       );
-      // 在 OCR 屏幕完全关闭后再更新输入框，避免闪动问题
       if (result != null && result is String && mounted) {
         final currentText = _textController.text;
         _textController.text = currentText + result;
@@ -433,7 +405,6 @@ class _HomeScreenState extends State<HomeScreen> {
     } on PlatformException catch (e) {
       debugPrint('OCR 平台异常: ${e.code} - ${e.message}');
       debugPrint('详细信息: ${e.details}');
-      // ignore: use_build_context_synchronously
       if (dialogContext != null && dialogContext!.mounted) {
         Navigator.pop(dialogContext!);
       }
@@ -443,7 +414,6 @@ class _HomeScreenState extends State<HomeScreen> {
     } catch (e, stackTrace) {
       debugPrint('OCR 处理异常: $e');
       debugPrint('堆栈: $stackTrace');
-      // ignore: use_build_context_synchronously
       if (dialogContext != null && dialogContext!.mounted) {
         Navigator.pop(dialogContext!);
       }
@@ -453,7 +423,6 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
-  /// 显示提示
   void _showSnackBar(String message, {bool isError = true}) {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
@@ -467,7 +436,6 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  /// 显示服务器选择对话框
   void _showServerSelectionDialog(List<DiscoveredComputer> computers) {
     if (_isShowingServerList) return;
     _isShowingServerList = true;
@@ -475,81 +443,79 @@ class _HomeScreenState extends State<HomeScreen> {
     showDialog(
       context: context,
       barrierDismissible: false,
-      builder:
-          (context) => AlertDialog(
-            title: Row(
-              children: [
-                const Expanded(child: Text('选择电脑')),
-                IconButton(
-                  icon: const Icon(Icons.close),
-                  onPressed: () {
-                    _isShowingServerList = false;
-                    Navigator.pop(context);
+      builder: (context) => AlertDialog(
+        title: Row(
+          children: [
+            const Expanded(child: Text('选择电脑')),
+            IconButton(
+              icon: const Icon(Icons.close),
+              onPressed: () {
+                _isShowingServerList = false;
+                Navigator.pop(context);
+              },
+            ),
+          ],
+        ),
+        content: SizedBox(
+          width: double.maxFinite,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('发现了 ${computers.length} 台电脑：'),
+              const SizedBox(height: 16),
+              Flexible(
+                child: ListView.builder(
+                  shrinkWrap: true,
+                  itemCount: computers.length,
+                  itemBuilder: (context, index) {
+                    final computer = computers[index];
+                    return Card(
+                      child: ListTile(
+                        leading: Icon(
+                          computer.deviceType == 'macos'
+                              ? Icons.apple
+                              : Icons.computer,
+                        ),
+                        title: Text(computer.alias),
+                        subtitle: Text(computer.ip),
+                        trailing: ElevatedButton(
+                          onPressed: () async {
+                            _isShowingServerList = false;
+                            Navigator.pop(context);
+
+                            final wsService = context.read<WebSocketService>();
+                            final success = await wsService.connect(
+                              computer,
+                              autoReconnect: true,
+                            );
+
+                            if (success && mounted) {
+                              _showSnackBar(
+                                '已连接到 ${computer.alias}',
+                                isError: false,
+                              );
+                            } else if (mounted) {
+                              final errorMsg = wsService.connectionModel.errorMessage;
+                              _showSnackBar(errorMsg.isNotEmpty ? errorMsg : '连接失败');
+                            }
+                          },
+                          child: const Text('连接'),
+                        ),
+                      ),
+                    );
                   },
                 ),
-              ],
-            ),
-            content: SizedBox(
-              width: double.maxFinite,
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text('发现了 ${computers.length} 台电脑：'),
-                  const SizedBox(height: 16),
-                  Flexible(
-                    child: ListView.builder(
-                      shrinkWrap: true,
-                      itemCount: computers.length,
-                      itemBuilder: (context, index) {
-                        final computer = computers[index];
-                        return Card(
-                          child: ListTile(
-                            leading: Icon(
-                              computer.platform == 'macos'
-                                  ? Icons.apple
-                                  : Icons.computer,
-                            ),
-                            title: Text(computer.name),
-                            subtitle: Text(computer.ip),
-                            trailing: ElevatedButton(
-                              onPressed: () async {
-                                _isShowingServerList = false;
-                                Navigator.pop(context);
-
-                                final wsService = context.read<WebSocketService>();
-                                final success = await wsService.connect(
-                                  computer,
-                                  autoReconnect: true,
-                                );
-
-                                if (success && mounted) {
-                                  _showSnackBar(
-                                    '已连接到 ${computer.name}',
-                                    isError: false,
-                                  );
-                                } else if (mounted) {
-                                  final errorMsg = wsService.connectionModel.errorMessage;
-                                  _showSnackBar(errorMsg.isNotEmpty ? errorMsg : '连接失败');
-                                }
-                              },
-                              child: const Text('连接'),
-                            ),
-                          ),
-                        );
-                      },
-                    ),
-                  ),
-                ],
               ),
-            ),
+            ],
           ),
+        ),
+      ),
     ).then((_) {
       _isShowingServerList = false;
     });
   }
 
-  /// 显示服务端列表弹窗（点击状态按钮后弹出）
   void _showServerListPopup() {
     _hasAutoConnected = false;
 
@@ -567,7 +533,7 @@ class _HomeScreenState extends State<HomeScreen> {
         final success = await wsService.connect(device, autoReconnect: true);
 
         if (success && mounted) {
-          _showSnackBar('已连接到 ${device.name}', isError: false);
+          _showSnackBar('已连接到 ${device.alias}', isError: false);
         } else if (mounted) {
           final errorMsg = wsService.connectionModel.errorMessage;
           _showSnackBar(errorMsg.isNotEmpty ? errorMsg : '连接失败');
@@ -618,26 +584,25 @@ class _HomeScreenState extends State<HomeScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              // 连接状态卡片
               Consumer<WebSocketService>(
                 builder: (context, wsService, child) {
                   final connectionModel = wsService.connectionModel;
-                  
+
                   if (connectionModel.isConnected) {
                     return Container(
                       padding: const EdgeInsets.all(12),
                       margin: const EdgeInsets.only(bottom: 8),
                       decoration: BoxDecoration(
-                        color: Colors.green.withOpacity(0.1),
+                        color: Colors.green.withValues(alpha: 0.1),
                         borderRadius: BorderRadius.circular(8),
-                        border: Border.all(color: Colors.green.withOpacity(0.3)),
+                        border: Border.all(color: Colors.green.withValues(alpha: 0.3)),
                       ),
                       child: Row(
                         children: [
                           Container(
                             padding: const EdgeInsets.all(8),
                             decoration: BoxDecoration(
-                              color: Colors.green.withOpacity(0.2),
+                              color: Colors.green.withValues(alpha: 0.2),
                               borderRadius: BorderRadius.circular(8),
                             ),
                             child: const Icon(Icons.computer, color: Colors.green, size: 24),
@@ -658,8 +623,8 @@ class _HomeScreenState extends State<HomeScreen> {
                                     ),
                                     Expanded(
                                       child: Text(
-                                        connectionModel.computerName.isNotEmpty 
-                                            ? connectionModel.computerName 
+                                        connectionModel.computerName.isNotEmpty
+                                            ? connectionModel.computerName
                                             : connectionModel.computerIp,
                                         style: const TextStyle(
                                           color: Colors.green,
@@ -693,13 +658,13 @@ class _HomeScreenState extends State<HomeScreen> {
                       ),
                     );
                   }
-                  
+
                   if (connectionModel.isConnecting) {
                     return Container(
                       padding: const EdgeInsets.all(12),
                       margin: const EdgeInsets.only(bottom: 8),
                       decoration: BoxDecoration(
-                        color: Colors.orange.withOpacity(0.1),
+                        color: Colors.orange.withValues(alpha: 0.1),
                         borderRadius: BorderRadius.circular(8),
                       ),
                       child: Row(
@@ -720,13 +685,13 @@ class _HomeScreenState extends State<HomeScreen> {
                       ),
                     );
                   }
-                  
+
                   if (connectionModel.status == ConnectionStatus.error) {
                     return Container(
                       padding: const EdgeInsets.all(12),
                       margin: const EdgeInsets.only(bottom: 8),
                       decoration: BoxDecoration(
-                        color: Colors.red.withOpacity(0.1),
+                        color: Colors.red.withValues(alpha: 0.1),
                         borderRadius: BorderRadius.circular(8),
                       ),
                       child: Row(
@@ -735,8 +700,8 @@ class _HomeScreenState extends State<HomeScreen> {
                           const SizedBox(width: 12),
                           Expanded(
                             child: Text(
-                              connectionModel.errorMessage.isNotEmpty 
-                                  ? connectionModel.errorMessage 
+                              connectionModel.errorMessage.isNotEmpty
+                                  ? connectionModel.errorMessage
                                   : '连接失败',
                               style: const TextStyle(color: Colors.red),
                               maxLines: 2,
@@ -764,7 +729,7 @@ class _HomeScreenState extends State<HomeScreen> {
                           padding: const EdgeInsets.all(12),
                           margin: const EdgeInsets.only(bottom: 8),
                           decoration: BoxDecoration(
-                            color: Colors.blue.withOpacity(0.1),
+                            color: Colors.blue.withValues(alpha: 0.1),
                             borderRadius: BorderRadius.circular(8),
                           ),
                           child: Row(
@@ -780,8 +745,8 @@ class _HomeScreenState extends State<HomeScreen> {
                               const SizedBox(width: 12),
                               Expanded(
                                 child: Text(
-                                  isScanning 
-                                      ? '正在搜索局域网中的电脑...' 
+                                  isScanning
+                                      ? '正在搜索局域网中的电脑...'
                                       : '未发现设备，点击右侧手动输入',
                                   style: const TextStyle(color: Colors.blue),
                                 ),
@@ -799,7 +764,7 @@ class _HomeScreenState extends State<HomeScreen> {
                         padding: const EdgeInsets.all(12),
                         margin: const EdgeInsets.only(bottom: 8),
                         decoration: BoxDecoration(
-                          color: Colors.green.withOpacity(0.1),
+                          color: Colors.green.withValues(alpha: 0.1),
                           borderRadius: BorderRadius.circular(8),
                         ),
                         child: Row(
@@ -823,7 +788,6 @@ class _HomeScreenState extends State<HomeScreen> {
                   );
                 },
               ),
-              // 文字输入区域 - 使用 Flexible 而不是 Expanded，避免键盘弹出时被压缩
               Flexible(
                 flex: 3,
                 child: Container(
@@ -833,7 +797,6 @@ class _HomeScreenState extends State<HomeScreen> {
                   ),
                   child: Stack(
                     children: [
-                      // 文本输入框
                       TextField(
                         controller: _textController,
                         maxLines: null,
@@ -848,17 +811,15 @@ class _HomeScreenState extends State<HomeScreen> {
                             fontSize: Constants.fontSizeLarge,
                             color: Colors.grey,
                           ),
-                          // 为右上角按钮留出空间，右侧增加padding
                           contentPadding: const EdgeInsets.fromLTRB(
-                            Constants.paddingNormal, 
-                            Constants.paddingNormal, 
-                            48, // 右侧留出空间给清空按钮
+                            Constants.paddingNormal,
+                            Constants.paddingNormal,
+                            48,
                             Constants.paddingNormal,
                           ),
                           border: InputBorder.none,
                         ),
                       ),
-                      // 右上角清空按钮
                       Positioned(
                         top: 8,
                         right: 8,
@@ -893,10 +854,8 @@ class _HomeScreenState extends State<HomeScreen> {
 
               const SizedBox(height: Constants.paddingNormal),
 
-              // 三个按钮水平排列在一行
               Row(
                 children: [
-                  // 拍照按钮
                   Expanded(
                     child: ElevatedButton.icon(
                       onPressed: _takePhoto,
@@ -916,7 +875,6 @@ class _HomeScreenState extends State<HomeScreen> {
                     ),
                   ),
                   const SizedBox(width: 8),
-                  // 相册按钮
                   Expanded(
                     child: OutlinedButton.icon(
                       onPressed: _pickFromGallery,
@@ -934,7 +892,6 @@ class _HomeScreenState extends State<HomeScreen> {
                     ),
                   ),
                   const SizedBox(width: 8),
-                  // 发送按钮
                   Expanded(
                     child: ElevatedButton.icon(
                       onPressed: _isSending ? null : _sendText,
@@ -955,7 +912,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       style: ElevatedButton.styleFrom(
                         backgroundColor: Colors.green,
                         foregroundColor: Colors.white,
-                        disabledBackgroundColor: Colors.green.withOpacity(0.5),
+                        disabledBackgroundColor: Colors.green.withValues(alpha: 0.5),
                         padding: const EdgeInsets.symmetric(vertical: 12),
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(8),
