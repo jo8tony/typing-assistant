@@ -180,12 +180,15 @@ class LocalSendDiscoveryService {
 
       _multicastSocket!.broadcastEnabled = true;
 
+      debugPrint('多播Socket已绑定，端口: ${_multicastSocket!.port}');
+
       try {
         final multicastGroup = InternetAddress(multicastAddress);
         _multicastSocket!.joinMulticast(multicastGroup);
-        debugPrint('已加入多播组: $multicastAddress');
+        debugPrint('✓ 已加入多播组: $multicastAddress');
       } catch (e) {
-        debugPrint('加入多播组失败 (将尝试继续): $e');
+        debugPrint('✗ 加入多播组失败: $e');
+        debugPrint('  多播发现可能无法工作，将依赖 HTTP 扫描');
       }
 
       _multicastSocket!.listen((event) {
@@ -197,7 +200,7 @@ class LocalSendDiscoveryService {
         }
       });
 
-      debugPrint('多播监听器已启动，端口: ${_multicastSocket!.port}');
+      debugPrint('✓ 多播监听器已启动');
     } catch (e) {
       debugPrint('启动多播监听器失败: $e');
     }
@@ -316,8 +319,10 @@ class LocalSendDiscoveryService {
       final socket = await Socket.connect(
         ip,
         httpPort,
-        timeout: const Duration(milliseconds: 1500),
+        timeout: const Duration(milliseconds: 3000),  // 增加超时时间以提高发现成功率
       );
+
+      debugPrint('HTTP 连接成功: $ip');
 
       final request = 'GET /api/$apiVersion/info HTTP/1.1\r\nHost: $ip:$httpPort\r\nConnection: close\r\n\r\n';
 
@@ -330,7 +335,10 @@ class LocalSendDiscoveryService {
 
       await socket.close();
 
-      if (response.isEmpty) return;
+      if (response.isEmpty) {
+        debugPrint('HTTP 响应为空: $ip');
+        return;
+      }
 
       final responseStr = utf8.decode(response, allowMalformed: true);
 
@@ -349,16 +357,20 @@ class LocalSendDiscoveryService {
               if (deviceId != _deviceId && !_discoveredDevices.containsKey(deviceId)) {
                 final discoveredDevice = DiscoveredDevice.fromJson(device, ip);
                 _addDevice(discoveredDevice);
-                debugPrint('HTTP 发现设备: ${discoveredDevice.name} @ $ip');
+                debugPrint('✓ HTTP 发现设备: ${discoveredDevice.name} @ $ip');
+              } else if (_discoveredDevices.containsKey(deviceId)) {
+                debugPrint('HTTP 设备已存在: ${device['name']} @ $ip');
               }
             }
           }
         }
       }
     } on TimeoutException {
-      debugPrint('HTTP 扫描超时: $ip');
+      // HTTP 扫描超时是正常情况，大部分 IP 不存在服务，不打印日志
     } on SocketException {
       // 连接被拒绝或主机不可达，这是正常情况
+      // 只在需要调试时取消注释
+      // debugPrint('HTTP Socket异常 ($ip): ${e.message}');
     } catch (e) {
       debugPrint('HTTP 扫描异常 ($ip): $e');
     }
