@@ -4,8 +4,8 @@ class Constants {
   static const Duration heartbeatInterval = Duration(seconds: 30);
   static const Duration reconnectInterval = Duration(seconds: 5);
 
-  static const String multicastAddress = '224.0.0.167';
-  static const int multicastPort = 53317;
+  static const String multicastAddress = '224.0.0.168';
+  static const int multicastPort = 53318;
   static const String apiVersion = 'v1';
   static const Duration announceInterval = Duration(seconds: 2);
   static const Duration deviceTimeout = Duration(seconds: 30);

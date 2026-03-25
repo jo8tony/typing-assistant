@@ -63,8 +63,8 @@ class DiscoveredDevice {
 }
 
 class DiscoveryConstants {
-  static const String multicastAddress = '224.0.0.167';
-  static const int multicastPort = 53317;
+  static const String multicastAddress = '224.0.0.168';
+  static const int multicastPort = 53318;
   static const int websocketPort = 8765;
   static const Duration announceInterval = Duration(seconds: 2);
   static const Duration cleanupInterval = Duration(seconds: 10);
