@@ -167,7 +167,7 @@ class _DeviceDiscoverySheetState extends State<DeviceDiscoverySheet> {
             width: 40,
             height: 4,
             decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha: 0.3),
+              color: Colors.white.withOpacity(0.3),
               borderRadius: BorderRadius.circular(2),
             ),
           ),
@@ -177,7 +177,7 @@ class _DeviceDiscoverySheetState extends State<DeviceDiscoverySheet> {
               Container(
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
-                  color: Colors.white.withValues(alpha: 0.2),
+                  color: Colors.white.withOpacity(0.2),
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: const Icon(
@@ -204,7 +204,7 @@ class _DeviceDiscoverySheetState extends State<DeviceDiscoverySheet> {
                       'LocalSend 风格 · 多播发现',
                       style: TextStyle(
                         fontSize: 13,
-                        color: Colors.white.withValues(alpha: 0.8),
+                        color: Colors.white.withOpacity(0.8),
                       ),
                     ),
                   ],
@@ -215,7 +215,7 @@ class _DeviceDiscoverySheetState extends State<DeviceDiscoverySheet> {
                   padding:
                       const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                   decoration: BoxDecoration(
-                    color: Colors.white.withValues(alpha: 0.2),
+                    color: Colors.white.withOpacity(0.2),
                     borderRadius: BorderRadius.circular(20),
                   ),
                   child: Row(
