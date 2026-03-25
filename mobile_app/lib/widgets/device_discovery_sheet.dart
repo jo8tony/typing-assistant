@@ -73,18 +73,34 @@ class _DeviceDiscoverySheetState extends State<DeviceDiscoverySheet> {
   }
 
   Future<void> _handleRefresh() async {
-    if (_isRefreshing) return;
+    if (_isRefreshing) {
+      debugPrint('已经在刷新中，跳过');
+      return;
+    }
     
+    debugPrint('开始重新扫描...');
     setState(() => _isRefreshing = true);
     
     try {
       await widget.discoveryService.restartDiscovery();
+      debugPrint('重新扫描完成');
       
       if (mounted) {
+        setState(() {});
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text('已重新扫描'),
             duration: Duration(seconds: 1),
+          ),
+        );
+      }
+    } catch (e) {
+      debugPrint('重新扫描失败: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('扫描失败: $e'),
+            backgroundColor: Colors.red,
           ),
         );
       }

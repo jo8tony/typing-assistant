@@ -114,7 +114,10 @@ class LocalSendDiscoveryService {
   }
 
   Future<void> startDiscovery() async {
-    if (_isRunning) return;
+    if (_isRunning) {
+      debugPrint('发现服务已在运行中，跳过');
+      return;
+    }
 
     await stopDiscovery();
     _isRunning = true;
@@ -124,10 +127,17 @@ class LocalSendDiscoveryService {
 
     debugPrint('=== 开始 LocalSend 风格网络发现 ===');
 
-    await _acquireMulticastLock();
+    final multicastAcquired = await _acquireMulticastLock();
+    if (!multicastAcquired && Platform.isAndroid) {
+      debugPrint('警告: MulticastLock 获取失败，多播发现可能无法工作');
+    }
 
     _localIp = await _getLocalIp();
     debugPrint('本机 IP: $_localIp');
+
+    if (_localIp == null) {
+      debugPrint('无法获取本机 IP，网络发现可能无法正常工作');
+    }
 
     await _startMulticastListener();
 
@@ -143,10 +153,12 @@ class LocalSendDiscoveryService {
 
     _sendProbeRequest();
 
+    debugPrint('=== 开始 HTTP 扫描 ===');
     await _runHttpScan();
+    debugPrint('=== HTTP 扫描完成 ===');
 
     _isScanning = false;
-    debugPrint('=== 网络发现初始化完成 ===');
+    debugPrint('=== 网络发现初始化完成，发现 ${_discoveredDevices.length} 台设备 ===');
 
     _rescanTimer = Timer.periodic(const Duration(seconds: 15), (_) {
       if (_isRunning && !_isScanning) {
@@ -304,7 +316,7 @@ class LocalSendDiscoveryService {
       final socket = await Socket.connect(
         ip,
         httpPort,
-        timeout: const Duration(milliseconds: 500),
+        timeout: const Duration(milliseconds: 1500),
       );
 
       final request = 'GET /api/$apiVersion/info HTTP/1.1\r\nHost: $ip:$httpPort\r\nConnection: close\r\n\r\n';
@@ -314,9 +326,11 @@ class LocalSendDiscoveryService {
       final response = await socket.fold<List<int>>(
         [],
         (prev, chunk) => prev..addAll(chunk),
-      );
+      ).timeout(const Duration(seconds: 2), onTimeout: () => []);
 
       await socket.close();
+
+      if (response.isEmpty) return;
 
       final responseStr = utf8.decode(response, allowMalformed: true);
 
@@ -341,7 +355,12 @@ class LocalSendDiscoveryService {
           }
         }
       }
+    } on TimeoutException {
+      debugPrint('HTTP 扫描超时: $ip');
+    } on SocketException {
+      // 连接被拒绝或主机不可达，这是正常情况
     } catch (e) {
+      debugPrint('HTTP 扫描异常 ($ip): $e');
     }
   }
 
@@ -415,8 +434,28 @@ class LocalSendDiscoveryService {
   }
 
   Future<void> restartDiscovery() async {
+    debugPrint('=== 重新开始网络发现 ===');
+    
+    _announceTimer?.cancel();
+    _announceTimer = null;
+    _cleanupTimer?.cancel();
+    _cleanupTimer = null;
+    _rescanTimer?.cancel();
+    _rescanTimer = null;
+
+    if (_multicastSocket != null) {
+      try {
+        _multicastSocket!.close();
+      } catch (e) {}
+      _multicastSocket = null;
+    }
+
+    _isRunning = false;
+    _isScanning = false;
+    
     _discoveredDevices.clear();
     _devicesController.add([]);
+    
     await startDiscovery();
   }
 

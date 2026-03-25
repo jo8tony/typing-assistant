@@ -11,6 +11,7 @@ import '../services/local_send_discovery_service.dart';
 import '../services/ocr_service.dart';
 import '../services/text_history_service.dart';
 import '../widgets/connection_status.dart';
+import '../models/connection_model.dart';
 import '../widgets/device_discovery_sheet.dart';
 import '../utils/constants.dart';
 import 'ocr_screen.dart';
@@ -617,11 +618,138 @@ class _HomeScreenState extends State<HomeScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              // 在未连接状态下显示发现状态
+              // 连接状态卡片
               Consumer<WebSocketService>(
                 builder: (context, wsService, child) {
-                  if (wsService.connectionModel.isConnected) {
-                    return const SizedBox.shrink();
+                  final connectionModel = wsService.connectionModel;
+                  
+                  if (connectionModel.isConnected) {
+                    return Container(
+                      padding: const EdgeInsets.all(12),
+                      margin: const EdgeInsets.only(bottom: 8),
+                      decoration: BoxDecoration(
+                        color: Colors.green.withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: Colors.green.withOpacity(0.3)),
+                      ),
+                      child: Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.all(8),
+                            decoration: BoxDecoration(
+                              color: Colors.green.withOpacity(0.2),
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: const Icon(Icons.computer, color: Colors.green, size: 24),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
+                                  children: [
+                                    const Text(
+                                      '已连接: ',
+                                      style: TextStyle(
+                                        color: Colors.green,
+                                        fontWeight: FontWeight.w500,
+                                      ),
+                                    ),
+                                    Expanded(
+                                      child: Text(
+                                        connectionModel.computerName.isNotEmpty 
+                                            ? connectionModel.computerName 
+                                            : connectionModel.computerIp,
+                                        style: const TextStyle(
+                                          color: Colors.green,
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 2),
+                                Text(
+                                  connectionModel.computerIp,
+                                  style: TextStyle(
+                                    color: Colors.green.shade700,
+                                    fontSize: 12,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          TextButton.icon(
+                            onPressed: _showServerListPopup,
+                            icon: const Icon(Icons.swap_horiz, size: 18),
+                            label: const Text('切换'),
+                            style: TextButton.styleFrom(
+                              foregroundColor: Colors.green.shade700,
+                            ),
+                          ),
+                        ],
+                      ),
+                    );
+                  }
+                  
+                  if (connectionModel.isConnecting) {
+                    return Container(
+                      padding: const EdgeInsets.all(12),
+                      margin: const EdgeInsets.only(bottom: 8),
+                      decoration: BoxDecoration(
+                        color: Colors.orange.withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Row(
+                        children: [
+                          const SizedBox(
+                            width: 20,
+                            height: 20,
+                            child: CircularProgressIndicator(strokeWidth: 2, color: Colors.orange),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Text(
+                              '正在连接 ${connectionModel.computerIp}...',
+                              style: const TextStyle(color: Colors.orange),
+                            ),
+                          ),
+                        ],
+                      ),
+                    );
+                  }
+                  
+                  if (connectionModel.status == ConnectionStatus.error) {
+                    return Container(
+                      padding: const EdgeInsets.all(12),
+                      margin: const EdgeInsets.only(bottom: 8),
+                      decoration: BoxDecoration(
+                        color: Colors.red.withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Row(
+                        children: [
+                          const Icon(Icons.error_outline, color: Colors.red, size: 20),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Text(
+                              connectionModel.errorMessage.isNotEmpty 
+                                  ? connectionModel.errorMessage 
+                                  : '连接失败',
+                              style: const TextStyle(color: Colors.red),
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                          TextButton(
+                            onPressed: _showServerListPopup,
+                            child: const Text('重试'),
+                          ),
+                        ],
+                      ),
+                    );
                   }
 
                   return StreamBuilder<List<DiscoveredComputer>>(
@@ -629,6 +757,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     initialData: _discoveryService.discoveredComputers,
                     builder: (context, snapshot) {
                       final computers = snapshot.data ?? [];
+                      final isScanning = _discoveryService.isScanning;
 
                       if (computers.isEmpty) {
                         return Container(
@@ -638,19 +767,28 @@ class _HomeScreenState extends State<HomeScreen> {
                             color: Colors.blue.withOpacity(0.1),
                             borderRadius: BorderRadius.circular(8),
                           ),
-                          child: const Row(
+                          child: Row(
                             children: [
-                              SizedBox(
-                                width: 16,
-                                height: 16,
-                                child: CircularProgressIndicator(strokeWidth: 2),
-                              ),
-                              SizedBox(width: 12),
+                              if (isScanning)
+                                const SizedBox(
+                                  width: 16,
+                                  height: 16,
+                                  child: CircularProgressIndicator(strokeWidth: 2),
+                                )
+                              else
+                                const Icon(Icons.info_outline, color: Colors.blue, size: 20),
+                              const SizedBox(width: 12),
                               Expanded(
                                 child: Text(
-                                  '正在搜索局域网中的电脑...',
-                                  style: TextStyle(color: Colors.blue),
+                                  isScanning 
+                                      ? '正在搜索局域网中的电脑...' 
+                                      : '未发现设备，点击右侧手动输入',
+                                  style: const TextStyle(color: Colors.blue),
                                 ),
+                              ),
+                              TextButton(
+                                onPressed: _showServerListPopup,
+                                child: const Text('手动输入'),
                               ),
                             ],
                           ),
@@ -674,11 +812,10 @@ class _HomeScreenState extends State<HomeScreen> {
                                 style: const TextStyle(color: Colors.green),
                               ),
                             ),
-                            if (computers.length > 1)
-                              TextButton(
-                                onPressed: () => _showServerSelectionDialog(computers),
-                                child: const Text('选择'),
-                              ),
+                            TextButton(
+                              onPressed: () => _showServerSelectionDialog(computers),
+                              child: const Text('选择'),
+                            ),
                           ],
                         ),
                       );
