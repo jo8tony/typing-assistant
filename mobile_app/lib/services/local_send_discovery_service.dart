@@ -50,6 +50,7 @@ class LocalSendDiscoveryService {
   static const String multicastAddress = '224.0.0.167';
   static const int multicastPort = 41317;
   static const int httpPort = 41317;
+  static const int websocketPort = 8765;  // WebSocket 端口
   static const String apiVersion = 'v2';
 
   static const MethodChannel _multicastChannel = MethodChannel('com.example.typing_assistant/multicast');
@@ -282,11 +283,11 @@ class LocalSendDiscoveryService {
 
   Future<void> _runHttpScan() async {
     if (_localIp == null) {
-      debugPrint('无法获取本机 IP，跳过 HTTP 扫描');
+      debugPrint('无法获取本机 IP，跳过网络扫描');
       return;
     }
 
-    debugPrint('开始 HTTP 局域网扫描...');
+    debugPrint('开始局域网扫描（WebSocket 端口 $websocketPort）...');
 
     final ipParts = _localIp!.split('.');
     if (ipParts.length != 4) return;
@@ -298,12 +299,12 @@ class LocalSendDiscoveryService {
       final ip = '$subnet.$i';
       if (ip == _localIp) continue;
 
-      futures.add(_checkHttpDevice(ip));
+      futures.add(_checkWebSocketDevice(ip));
 
-      if (futures.length >= 30) {
+      if (futures.length >= 64) {  // 增加并发数加快扫描
         await Future.wait(futures);
         futures.clear();
-        await Future.delayed(const Duration(milliseconds: 50));
+        await Future.delayed(const Duration(milliseconds: 5));
       }
     }
 
@@ -311,68 +312,67 @@ class LocalSendDiscoveryService {
       await Future.wait(futures);
     }
 
-    debugPrint('HTTP 扫描完成');
+    debugPrint('局域网扫描完成');
   }
 
-  Future<void> _checkHttpDevice(String ip) async {
+  /// 检查 WebSocket 端口是否有服务运行
+  Future<void> _checkWebSocketDevice(String ip) async {
     try {
+      // 快速尝试连接 WebSocket 端口
       final socket = await Socket.connect(
         ip,
-        httpPort,
-        timeout: const Duration(milliseconds: 3000),  // 增加超时时间以提高发现成功率
+        websocketPort,
+        timeout: const Duration(milliseconds: 300),  // 局域网内应该很快响应
       );
 
-      debugPrint('HTTP 连接成功: $ip');
+      debugPrint('✓ 发现服务: $ip:$websocketPort');
 
-      final request = 'GET /api/$apiVersion/info HTTP/1.1\r\nHost: $ip:$httpPort\r\nConnection: close\r\n\r\n';
+      // 发送 WebSocket 握手请求来验证
+      final key = base64Encode(utf8.encode('typing_${DateTime.now().millisecondsSinceEpoch}'));
+      final request = 'GET / HTTP/1.1\r\n'
+          'Host: $ip:$websocketPort\r\n'
+          'Upgrade: websocket\r\n'
+          'Connection: Upgrade\r\n'
+          'Sec-WebSocket-Key: $key\r\n'
+          'Sec-WebSocket-Version: 13\r\n'
+          '\r\n';
 
       socket.write(request);
 
-      final response = await socket.fold<List<int>>(
-        [],
-        (prev, chunk) => prev..addAll(chunk),
-      ).timeout(const Duration(seconds: 2), onTimeout: () => []);
+      // 读取响应（使用简单的方式）
+      List<int> response = [];
+      try {
+        response = await socket.first.timeout(
+          const Duration(milliseconds: 300),
+          onTimeout: () => Uint8List(0),
+        );
+      } catch (_) {
+        // 读取超时或失败
+      }
 
       await socket.close();
 
-      if (response.isEmpty) {
-        debugPrint('HTTP 响应为空: $ip');
-        return;
-      }
-
-      final responseStr = utf8.decode(response, allowMalformed: true);
-
-      if (responseStr.contains('HTTP/1.1 200') || responseStr.contains('HTTP/1.0 200')) {
-        final jsonStart = responseStr.indexOf('{');
-        final jsonEnd = responseStr.lastIndexOf('}');
-
-        if (jsonStart != -1 && jsonEnd != -1) {
-          final jsonStr = responseStr.substring(jsonStart, jsonEnd + 1);
-          final data = jsonDecode(jsonStr);
-
-          if (data['type'] == 'info') {
-            final device = data['device'];
-            if (device != null) {
-              final deviceId = device['id'];
-              if (deviceId != _deviceId && !_discoveredDevices.containsKey(deviceId)) {
-                final discoveredDevice = DiscoveredDevice.fromJson(device, ip);
-                _addDevice(discoveredDevice);
-                debugPrint('✓ HTTP 发现设备: ${discoveredDevice.name} @ $ip');
-              } else if (_discoveredDevices.containsKey(deviceId)) {
-                debugPrint('HTTP 设备已存在: ${device['name']} @ $ip');
-              }
-            }
+      if (response.isNotEmpty) {
+        final responseStr = utf8.decode(response, allowMalformed: true);
+        // 检查是否是 WebSocket 握手成功响应
+        if (responseStr.contains('101') || responseStr.contains('Switching Protocols')) {
+          final deviceId = 'ws-${ip.hashCode}';
+          if (!_discoveredDevices.containsKey(deviceId)) {
+            final discoveredDevice = DiscoveredDevice(
+              id: deviceId,
+              name: '打字助手-$ip',
+              ip: ip,
+              port: websocketPort,
+              platform: 'unknown',
+              deviceType: 'desktop',
+            );
+            _addDevice(discoveredDevice);
+            debugPrint('✓ 发现设备: ${discoveredDevice.name}');
           }
         }
       }
-    } on TimeoutException {
-      // HTTP 扫描超时是正常情况，大部分 IP 不存在服务，不打印日志
-    } on SocketException {
-      // 连接被拒绝或主机不可达，这是正常情况
-      // 只在需要调试时取消注释
-      // debugPrint('HTTP Socket异常 ($ip): ${e.message}');
     } catch (e) {
-      debugPrint('HTTP 扫描异常 ($ip): $e');
+      // 连接失败是正常的，大部分 IP 没有服务
     }
   }
 
