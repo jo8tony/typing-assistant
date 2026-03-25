@@ -89,6 +89,7 @@ class DiscoveryService extends ChangeNotifier {
   bool _multicastLockAcquired = false;
   String? _localIp;
   late String _fingerprint;
+  int _announceCount = 0;
 
   String get fingerprint => _fingerprint;
   Stream<List<DiscoveredDevice>> get devicesStream => _devicesController.stream;
@@ -262,17 +263,17 @@ class DiscoveryService extends ChangeNotifier {
   void _handleMulticastMessage(Datagram datagram) {
     try {
       final message = utf8.decode(datagram.data);
+      debugPrint('收到多播消息: ${message.length} bytes from ${datagram.address.address}');
+
       final json = jsonDecode(message);
 
       if (json is Map<String, dynamic> && json['announce'] == true) {
         final fingerprint = json['fingerprint'] as String?;
         if (fingerprint != null && fingerprint != _fingerprint) {
-          final device = DiscoveredDevice.fromAnnounce(
-            json,
-            json['ip'] ?? datagram.address.address,
-          );
+          final deviceIp = json['ip'] ?? datagram.address.address;
+          final device = DiscoveredDevice.fromAnnounce(json, deviceIp);
           _addDevice(device);
-          debugPrint('多播发现设备: ${device.alias} @ ${device.ip}');
+          debugPrint('✓ 多播发现设备: ${device.alias} @ ${device.ip}');
         }
       }
     } catch (e) {
@@ -302,6 +303,11 @@ class DiscoveryService extends ChangeNotifier {
         InternetAddress(DiscoveryConstants.multicastAddress),
         DiscoveryConstants.multicastPort,
       );
+
+      _announceCount++;
+      if (_announceCount % 5 == 0) {
+        debugPrint('  [广播] #$_announceCount 已发送');
+      }
     } catch (e) {
       debugPrint('发送宣告失败: $e');
     }
@@ -318,6 +324,8 @@ class DiscoveryService extends ChangeNotifier {
 
     final subnet = '${ipParts[0]}.${ipParts[1]}.${ipParts[2]}';
     final futures = <Future>[];
+
+    debugPrint('扫描子网: $subnet.*');
 
     for (int i = 1; i <= 254; i++) {
       final ip = '$subnet.$i';
@@ -380,7 +388,7 @@ class DiscoveryService extends ChangeNotifier {
             deviceType: 'desktop',
           );
           _addDevice(device);
-          debugPrint('扫描发现设备: ${device.alias}');
+          debugPrint('✓ 扫描发现设备: ${device.alias}');
         }
       }
     } catch (e) {

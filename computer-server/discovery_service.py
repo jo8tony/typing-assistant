@@ -3,7 +3,6 @@ import json
 import threading
 import time
 import platform
-import hashlib
 from typing import Dict, Optional, Callable
 from config import Config
 
@@ -21,6 +20,7 @@ class DiscoveryService:
         self._discovered_devices: Dict[str, Dict] = {}
         self._on_device_discovered: Optional[Callable] = None
         self._threads: list = []
+        self._announce_count = 0
 
     def get_local_ip(self) -> str:
         try:
@@ -122,12 +122,28 @@ class DiscoveryService:
                 self.multicast_socket.setsockopt(
                     socket.IPPROTO_IP,
                     socket.IP_MULTICAST_TTL,
-                    Config.MULTICAST_TTL
+                    2
                 )
+                self.multicast_socket.setsockopt(
+                    socket.IPPROTO_IP,
+                    socket.IP_MULTICAST_LOOP,
+                    1
+                )
+                if self.local_ip and self.local_ip != '127.0.0.1':
+                    try:
+                        self.multicast_socket.setsockopt(
+                            socket.IPPROTO_IP,
+                            socket.IP_MULTICAST_IF,
+                            socket.inet_aton(self.local_ip)
+                        )
+                        print(f"  ✓ 设置多播接口: {self.local_ip}")
+                    except Exception as e:
+                        print(f"  ⚠ 设置多播接口失败: {e}")
+
                 print(f"  ✓ 已加入多播组 {Config.MULTICAST_ADDRESS}")
             except Exception as e:
                 print(f"  ⚠ 无法加入多播组: {e}")
-                print(f"    多播发现可能无法工作，但 HTTP 发现仍可用")
+                print(f"    多播发现可能无法工作")
 
             self.multicast_socket.settimeout(1.0)
 
@@ -140,6 +156,8 @@ class DiscoveryService:
 
         except Exception as e:
             print(f"  ✗ 启动多播失败: {e}")
+            import traceback
+            traceback.print_exc()
             return False
 
     def _announce_loop(self):
@@ -166,16 +184,21 @@ class DiscoveryService:
                 "port": self.device_info["port"],
                 "protocol": self.device_info["protocol"],
                 "download": self.device_info["download"],
-                "announce": self.device_info["announce"],
+                "ip": self.local_ip,
             }, ensure_ascii=False).encode('utf-8')
 
             self.multicast_socket.sendto(
                 message,
                 (Config.MULTICAST_ADDRESS, Config.MULTICAST_PORT)
             )
+
+            self._announce_count += 1
+            if self._announce_count % 5 == 0:
+                print(f"  [广播] #{self._announce_count} 已发送到 {Config.MULTICAST_ADDRESS}:{Config.MULTICAST_PORT}")
+
         except Exception as e:
             if self.is_running:
-                pass
+                print(f"  [广播] 发送失败: {e}")
 
     def _listen_loop(self):
         while self.is_running:
@@ -203,7 +226,7 @@ class DiscoveryService:
                         "deviceType": message.get("deviceType", "unknown"),
                         "port": message.get("port", Config.WEBSOCKET_PORT),
                         "protocol": message.get("protocol", "ws"),
-                        "ip": addr[0],
+                        "ip": message.get("ip") or addr[0],
                         "lastSeen": time.time(),
                     }
 
