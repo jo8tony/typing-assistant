@@ -47,6 +47,11 @@ class _DeviceDiscoverySheetState extends State<DeviceDiscoverySheet> {
   final TextEditingController _ipController = TextEditingController();
   final TextEditingController _portController = TextEditingController(text: '${Constants.websocketPort}');
   final TextEditingController _nameController = TextEditingController();
+  final FocusNode _ipFocusNode = FocusNode();
+  final FocusNode _portFocusNode = FocusNode();
+  
+  DiscoveryMethod _selectedMethod = DiscoveryMethod.multicast;
+  bool _isRefreshing = false;
 
   @override
   void initState() {
@@ -62,7 +67,32 @@ class _DeviceDiscoverySheetState extends State<DeviceDiscoverySheet> {
     _ipController.dispose();
     _portController.dispose();
     _nameController.dispose();
+    _ipFocusNode.dispose();
+    _portFocusNode.dispose();
     super.dispose();
+  }
+
+  Future<void> _handleRefresh() async {
+    if (_isRefreshing) return;
+    
+    setState(() => _isRefreshing = true);
+    
+    try {
+      await widget.discoveryService.restartDiscovery();
+      
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('已重新扫描'),
+            duration: Duration(seconds: 1),
+          ),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isRefreshing = false);
+      }
+    }
   }
 
   @override
@@ -80,7 +110,12 @@ class _DeviceDiscoverySheetState extends State<DeviceDiscoverySheet> {
           _buildHeader(isScanning),
           Expanded(
             child: SingleChildScrollView(
-              padding: const EdgeInsets.all(16),
+              padding: EdgeInsets.only(
+                left: 16,
+                right: 16,
+                top: 16,
+                bottom: MediaQuery.of(context).viewInsets.bottom + 16,
+              ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -202,22 +237,22 @@ class _DeviceDiscoverySheetState extends State<DeviceDiscoverySheet> {
         children: [
           Row(
             children: [
-              _buildStatusChip(
+              _buildMethodChip(
                 Icons.hub,
                 'UDP多播',
-                isActive: true,
+                method: DiscoveryMethod.multicast,
               ),
               const SizedBox(width: 8),
-              _buildStatusChip(
+              _buildMethodChip(
                 Icons.wifi,
                 'HTTP扫描',
-                isActive: isScanning,
+                method: DiscoveryMethod.httpScan,
               ),
               const SizedBox(width: 8),
-              _buildStatusChip(
+              _buildMethodChip(
                 Icons.edit,
                 '手动输入',
-                isActive: false,
+                method: DiscoveryMethod.manual,
               ),
             ],
           ),
@@ -230,49 +265,93 @@ class _DeviceDiscoverySheetState extends State<DeviceDiscoverySheet> {
                 color: deviceCount > 0 ? Colors.green : Colors.grey,
               ),
               const SizedBox(width: 8),
-              Text(
-                deviceCount > 0
-                    ? '已发现 $deviceCount 台设备'
-                    : isScanning
-                        ? '正在扫描局域网...'
-                        : '未发现设备，请检查网络或手动输入',
-                style: TextStyle(
-                  fontSize: 14,
-                  color: deviceCount > 0 ? Colors.green.shade700 : Colors.grey.shade700,
+              Expanded(
+                child: Text(
+                  deviceCount > 0
+                      ? '已发现 $deviceCount 台设备'
+                      : isScanning
+                          ? '正在扫描局域网...'
+                          : '未发现设备，请检查网络或手动输入',
+                  style: TextStyle(
+                    fontSize: 14,
+                    color: deviceCount > 0 ? Colors.green.shade700 : Colors.grey.shade700,
+                  ),
                 ),
               ),
             ],
           ),
+          if (deviceCount == 0 && !isScanning) ...[
+            const SizedBox(height: 12),
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton.icon(
+                onPressed: _isRefreshing ? null : _handleRefresh,
+                icon: _isRefreshing
+                    ? const SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: Colors.white,
+                        ),
+                      )
+                    : const Icon(Icons.refresh, size: 18),
+                label: Text(_isRefreshing ? '刷新中...' : '重新扫描'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.blue,
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(vertical: 10),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                ),
+              ),
+            ),
+          ],
         ],
       ),
     );
   }
 
-  Widget _buildStatusChip(IconData icon, String label, {required bool isActive}) {
+  Widget _buildMethodChip(IconData icon, String label, {required DiscoveryMethod method}) {
+    final isSelected = _selectedMethod == method;
+    
     return Expanded(
-      child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 8),
-        decoration: BoxDecoration(
-          color: isActive ? Colors.blue.shade100 : Colors.grey.shade200,
-          borderRadius: BorderRadius.circular(8),
-        ),
-        child: Column(
-          children: [
-            Icon(
-              icon,
-              size: 20,
-              color: isActive ? Colors.blue.shade700 : Colors.grey,
-            ),
-            const SizedBox(height: 4),
-            Text(
-              label,
-              style: TextStyle(
-                fontSize: 11,
-                color: isActive ? Colors.blue.shade700 : Colors.grey,
-                fontWeight: isActive ? FontWeight.w500 : FontWeight.normal,
+      child: GestureDetector(
+        onTap: () {
+          setState(() {
+            _selectedMethod = method;
+          });
+          
+          if (method == DiscoveryMethod.multicast || method == DiscoveryMethod.httpScan) {
+            _handleRefresh();
+          }
+        },
+        child: Container(
+          padding: const EdgeInsets.symmetric(vertical: 8),
+          decoration: BoxDecoration(
+            color: isSelected ? Colors.blue.shade100 : Colors.grey.shade200,
+            borderRadius: BorderRadius.circular(8),
+            border: isSelected ? Border.all(color: Colors.blue.shade300, width: 2) : null,
+          ),
+          child: Column(
+            children: [
+              Icon(
+                icon,
+                size: 20,
+                color: isSelected ? Colors.blue.shade700 : Colors.grey,
               ),
-            ),
-          ],
+              const SizedBox(height: 4),
+              Text(
+                label,
+                style: TextStyle(
+                  fontSize: 11,
+                  color: isSelected ? Colors.blue.shade700 : Colors.grey,
+                  fontWeight: isSelected ? FontWeight.w500 : FontWeight.normal,
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -293,11 +372,15 @@ class _DeviceDiscoverySheetState extends State<DeviceDiscoverySheet> {
               ),
             ),
             TextButton.icon(
-              onPressed: () {
-                widget.discoveryService.restartDiscovery();
-              },
-              icon: const Icon(Icons.refresh, size: 18),
-              label: const Text('刷新'),
+              onPressed: _isRefreshing ? null : _handleRefresh,
+              icon: _isRefreshing
+                  ? const SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Icon(Icons.refresh, size: 18),
+              label: Text(_isRefreshing ? '刷新中...' : '刷新'),
             ),
           ],
         ),
@@ -462,7 +545,9 @@ class _DeviceDiscoverySheetState extends State<DeviceDiscoverySheet> {
                     flex: 2,
                     child: TextField(
                       controller: _ipController,
+                      focusNode: _ipFocusNode,
                       keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                      textInputAction: TextInputAction.next,
                       decoration: InputDecoration(
                         labelText: 'IP地址',
                         hintText: '192.168.1.100',
@@ -478,7 +563,9 @@ class _DeviceDiscoverySheetState extends State<DeviceDiscoverySheet> {
                   Expanded(
                     child: TextField(
                       controller: _portController,
+                      focusNode: _portFocusNode,
                       keyboardType: TextInputType.number,
+                      textInputAction: TextInputAction.done,
                       decoration: InputDecoration(
                         labelText: '端口',
                         hintText: '8765',

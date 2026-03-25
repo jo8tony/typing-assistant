@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:math';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 
 class DiscoveredDevice {
   final String id;
@@ -51,13 +52,17 @@ class LocalSendDiscoveryService {
   static const int httpPort = 41317;
   static const String apiVersion = 'v2';
 
+  static const MethodChannel _multicastChannel = MethodChannel('com.example.typing_assistant/multicast');
+
   RawDatagramSocket? _multicastSocket;
   Timer? _announceTimer;
   Timer? _cleanupTimer;
+  Timer? _rescanTimer;
   final _devicesController = StreamController<List<DiscoveredDevice>>.broadcast();
   final Map<String, DiscoveredDevice> _discoveredDevices = {};
   bool _isRunning = false;
   bool _isScanning = false;
+  bool _multicastLockAcquired = false;
   String? _localIp;
   String? _deviceId;
 
@@ -78,6 +83,36 @@ class LocalSendDiscoveryService {
     return List.generate(8, (_) => hexDigits[random.nextInt(16)]).join();
   }
 
+  Future<bool> _acquireMulticastLock() async {
+    if (!Platform.isAndroid) {
+      return true;
+    }
+
+    try {
+      final result = await _multicastChannel.invokeMethod('acquireMulticastLock');
+      _multicastLockAcquired = result == true;
+      debugPrint('MulticastLock 获取结果: $_multicastLockAcquired');
+      return _multicastLockAcquired;
+    } catch (e) {
+      debugPrint('获取 MulticastLock 失败: $e');
+      return false;
+    }
+  }
+
+  Future<void> _releaseMulticastLock() async {
+    if (!Platform.isAndroid || !_multicastLockAcquired) {
+      return;
+    }
+
+    try {
+      await _multicastChannel.invokeMethod('releaseMulticastLock');
+      _multicastLockAcquired = false;
+      debugPrint('MulticastLock 已释放');
+    } catch (e) {
+      debugPrint('释放 MulticastLock 失败: $e');
+    }
+  }
+
   Future<void> startDiscovery() async {
     if (_isRunning) return;
 
@@ -88,6 +123,8 @@ class LocalSendDiscoveryService {
     _devicesController.add([]);
 
     debugPrint('=== 开始 LocalSend 风格网络发现 ===');
+
+    await _acquireMulticastLock();
 
     _localIp = await _getLocalIp();
     debugPrint('本机 IP: $_localIp');
@@ -110,6 +147,14 @@ class LocalSendDiscoveryService {
 
     _isScanning = false;
     debugPrint('=== 网络发现初始化完成 ===');
+
+    _rescanTimer = Timer.periodic(const Duration(seconds: 15), (_) {
+      if (_isRunning && !_isScanning) {
+        debugPrint('=== 定期重新扫描 ===');
+        _runHttpScan();
+        _sendProbeRequest();
+      }
+    });
   }
 
   Future<void> _startMulticastListener() async {
@@ -122,6 +167,14 @@ class LocalSendDiscoveryService {
       );
 
       _multicastSocket!.broadcastEnabled = true;
+
+      try {
+        final multicastGroup = InternetAddress(multicastAddress);
+        _multicastSocket!.joinMulticast(multicastGroup);
+        debugPrint('已加入多播组: $multicastAddress');
+      } catch (e) {
+        debugPrint('加入多播组失败 (将尝试继续): $e');
+      }
 
       _multicastSocket!.listen((event) {
         if (event == RawSocketEvent.read) {
@@ -232,7 +285,7 @@ class LocalSendDiscoveryService {
 
       futures.add(_checkHttpDevice(ip));
 
-      if (futures.length >= 20) {
+      if (futures.length >= 30) {
         await Future.wait(futures);
         futures.clear();
         await Future.delayed(const Duration(milliseconds: 50));
@@ -344,6 +397,8 @@ class LocalSendDiscoveryService {
     _announceTimer = null;
     _cleanupTimer?.cancel();
     _cleanupTimer = null;
+    _rescanTimer?.cancel();
+    _rescanTimer = null;
 
     if (_multicastSocket != null) {
       try {
@@ -352,6 +407,8 @@ class LocalSendDiscoveryService {
       }
       _multicastSocket = null;
     }
+
+    await _releaseMulticastLock();
 
     _isRunning = false;
     _isScanning = false;
