@@ -384,7 +384,7 @@ class TrayApplication:
         tooltip_thread.start()
         
         tray_thread = threading.Thread(
-            lambda: self.icon.run(),
+            target=lambda: self.icon.run(),
             daemon=True
         )
         tray_thread.start()
