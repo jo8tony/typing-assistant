@@ -35,6 +35,7 @@ class Config:
     CONFIG_FILE = CONFIG_DIR / "config.json"
 
     DEVICE_FINGERPRINT = None
+    DEVICE_NAME = None
 
     @classmethod
     def _generate_fingerprint(cls):
@@ -58,8 +59,10 @@ class Config:
             device_model = "Desktop"
             device_type = "desktop"
 
+        device_name = name or cls.DEVICE_NAME or f"打字助手-{platform.node()}"
+
         return {
-            "alias": name or f"打字助手-{platform.node()}",
+            "alias": device_name,
             "version": cls.VERSION,
             "deviceModel": device_model,
             "deviceType": device_type,
@@ -90,6 +93,7 @@ class Config:
             'WEBSOCKET_PORT': cls.WEBSOCKET_PORT,
             'HEARTBEAT_INTERVAL': cls.HEARTBEAT_INTERVAL,
             'DEVICE_FINGERPRINT': cls.DEVICE_FINGERPRINT,
+            'DEVICE_NAME': cls.DEVICE_NAME,
         }
         try:
             with open(cls.CONFIG_FILE, 'w', encoding='utf-8') as f:
@@ -103,3 +107,8 @@ class Config:
             if ip.startswith(network):
                 return True
         return False
+
+    @classmethod
+    def set_device_name(cls, name: str):
+        cls.DEVICE_NAME = name
+        cls.save()

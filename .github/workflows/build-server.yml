@@ -10,7 +10,7 @@ on:
   workflow_dispatch:
 
 jobs:
-  build-windows:
+  build-windows-gui:
     runs-on: windows-latest
     
     steps:
@@ -25,20 +25,25 @@ jobs:
       working-directory: ./computer-server
       run: |
         python -m pip install --upgrade pip
-        pip install pyinstaller
         pip install -r requirements.txt
     
-    - name: Build Windows executable
+    - name: Convert icon to ICO
       working-directory: ./computer-server
       run: |
-        pyinstaller --onefile --name typing-assistant-server main.py
+        python convert_icon.py
       continue-on-error: true
     
-    - name: Upload Windows build
+    - name: Build Windows GUI executable
+      working-directory: ./computer-server
+      run: |
+        pyinstaller typing_assistant.spec --clean
+      continue-on-error: true
+    
+    - name: Upload Windows GUI build
       if: success()
       uses: actions/upload-artifact@v4
       with:
-        name: typing-assistant-server-windows
+        name: typing-assistant-windows-gui
         path: computer-server/dist/
         retention-days: 30
 
@@ -57,7 +62,6 @@ jobs:
       working-directory: ./computer-server
       run: |
         python -m pip install --upgrade pip
-        pip install pyinstaller
         pip install -r requirements.txt
     
     - name: Build macOS executable
@@ -89,7 +93,6 @@ jobs:
       working-directory: ./computer-server
       run: |
         python -m pip install --upgrade pip
-        pip install pyinstaller
         pip install -r requirements.txt
     
     - name: Build Linux executable
@@ -127,7 +130,7 @@ jobs:
         retention-days: 30
 
   release-server:
-    needs: [build-windows, build-macos, build-linux, create-source-package]
+    needs: [build-windows-gui, build-macos, build-linux, create-source-package]
     runs-on: ubuntu-latest
     if: startsWith(github.ref, 'refs/tags/v')
     
@@ -143,7 +146,7 @@ jobs:
       uses: softprops/action-gh-release@v1
       with:
         files: |
-          ./artifacts/typing-assistant-server-windows/**/*
+          ./artifacts/typing-assistant-windows-gui/**/*
           ./artifacts/typing-assistant-server-macos/**/*
           ./artifacts/typing-assistant-server-linux/**/*
           ./artifacts/typing-assistant-server-source/*.zip
