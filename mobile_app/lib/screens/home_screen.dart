@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'dart:io';
-import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
@@ -32,7 +31,6 @@ class _HomeScreenState extends State<HomeScreen> {
   final ImagePicker _imagePicker = ImagePicker();
   bool _isSending = false;
   bool _hasAutoConnected = false;
-  bool _isShowingServerList = false;
   Timer? _discoveryTimer;
   List<DiscoveredComputer> _lastDiscoveredComputers = [];
 
@@ -193,12 +191,26 @@ class _HomeScreenState extends State<HomeScreen> {
           debugPrint('发现唯一服务，自动连接: ${currentComputers.first.ip}');
           wsService.connect(currentComputers.first, autoReconnect: true);
           _showSnackBar('已自动连接到 ${currentComputers.first.alias}', isError: false);
-        } else {
-          debugPrint('发现多个服务，显示选择对话框: ${currentComputers.length} 个');
-          _showServerSelectionDialog(currentComputers);
         }
       });
     });
+  }
+
+  Future<void> _connectToDevice(DiscoveredComputer computer) async {
+    final wsService = context.read<WebSocketService>();
+
+    if (wsService.connectionModel.isConnected) {
+      await wsService.disconnect();
+    }
+
+    final success = await wsService.connect(computer, autoReconnect: true);
+
+    if (success && mounted) {
+      _showSnackBar('已连接到 ${computer.alias}', isError: false);
+    } else if (mounted) {
+      final errorMsg = wsService.connectionModel.errorMessage;
+      _showSnackBar(errorMsg.isNotEmpty ? errorMsg : '连接失败');
+    }
   }
 
   Future<void> _sendText() async {
@@ -448,96 +460,6 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
-  void _showServerSelectionDialog(List<DiscoveredComputer> computers) {
-    if (_isShowingServerList) return;
-    _isShowingServerList = true;
-
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (context) => AlertDialog(
-        title: Row(
-          children: [
-            const Expanded(child: Text('选择电脑')),
-            IconButton(
-              icon: const Icon(Icons.close),
-              onPressed: () {
-                _isShowingServerList = false;
-                Navigator.pop(context);
-              },
-            ),
-          ],
-        ),
-        content: SizedBox(
-          width: double.maxFinite,
-          height: math.min(computers.length * 120 + 100, 400),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text('发现了 ${computers.length} 台电脑：'),
-              const SizedBox(height: 16),
-              Expanded(
-                child: ListView.builder(
-                  itemCount: computers.length,
-                  itemBuilder: (context, index) {
-                    final computer = computers[index];
-                    return Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 4),
-                      child: Card(
-                        child: ListTile(
-                          leading: Icon(
-                            computer.deviceType == 'macos'
-                                ? Icons.apple
-                                : Icons.computer,
-                          ),
-                          title: Text(
-                            computer.alias,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                          subtitle: Text(
-                            computer.ip,
-                            maxLines: 1,
-                          ),
-                          trailing: ElevatedButton(
-                            onPressed: () async {
-                              _isShowingServerList = false;
-                              Navigator.pop(context);
-
-                              final wsService = context.read<WebSocketService>();
-                              final success = await wsService.connect(
-                                computer,
-                                autoReconnect: true,
-                              );
-
-                              if (success && mounted) {
-                                _showSnackBar(
-                                  '已连接到 ${computer.alias}',
-                                  isError: false,
-                                );
-                              } else if (mounted) {
-                                final errorMsg = wsService.connectionModel.errorMessage;
-                                _showSnackBar(errorMsg.isNotEmpty ? errorMsg : '连接失败');
-                              }
-                            },
-                            child: const Text('连接'),
-                          ),
-                        ),
-                      ),
-                    );
-                  },
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    ).then((_) {
-      _isShowingServerList = false;
-    });
-  }
-
   void _showServerListPopup() {
     _hasAutoConnected = false;
 
@@ -784,29 +706,105 @@ class _HomeScreenState extends State<HomeScreen> {
                             );
                           }
 
-                          return Container(
-                            padding: const EdgeInsets.all(12),
-                            margin: const EdgeInsets.only(bottom: 8),
-                            decoration: BoxDecoration(
-                              color: Colors.green.withOpacity(0.1),
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                            child: Row(
-                              children: [
-                                const Icon(Icons.check_circle, color: Colors.green, size: 20),
-                                const SizedBox(width: 12),
-                                Expanded(
-                                  child: Text(
-                                    '发现 ${computers.length} 台电脑',
-                                    style: const TextStyle(color: Colors.green),
+                          return Column(
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                                margin: const EdgeInsets.only(bottom: 8),
+                                decoration: BoxDecoration(
+                                  color: Colors.green.withOpacity(0.1),
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                child: Row(
+                                  children: [
+                                    const Icon(Icons.check_circle, color: Colors.green, size: 18),
+                                    const SizedBox(width: 8),
+                                    Text(
+                                      '发现 ${computers.length} 台电脑，点击连接',
+                                      style: const TextStyle(color: Colors.green, fontSize: 13),
+                                    ),
+                                    const Spacer(),
+                                    TextButton(
+                                      onPressed: _showServerListPopup,
+                                      style: TextButton.styleFrom(
+                                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                                        minimumSize: Size.zero,
+                                      ),
+                                      child: const Text('手动输入', style: TextStyle(fontSize: 12)),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              ...computers.map((computer) => Padding(
+                                padding: const EdgeInsets.only(bottom: 8),
+                                child: InkWell(
+                                  onTap: () => _connectToDevice(computer),
+                                  borderRadius: BorderRadius.circular(8),
+                                  child: Container(
+                                    padding: const EdgeInsets.all(12),
+                                    decoration: BoxDecoration(
+                                      color: Colors.white,
+                                      borderRadius: BorderRadius.circular(8),
+                                      border: Border.all(color: Colors.grey.shade300),
+                                      boxShadow: [
+                                        BoxShadow(
+                                          color: Colors.black.withOpacity(0.05),
+                                          blurRadius: 4,
+                                          offset: const Offset(0, 2),
+                                        ),
+                                      ],
+                                    ),
+                                    child: Row(
+                                      children: [
+                                        Container(
+                                          padding: const EdgeInsets.all(10),
+                                          decoration: BoxDecoration(
+                                            color: Colors.blue.withOpacity(0.1),
+                                            borderRadius: BorderRadius.circular(8),
+                                          ),
+                                          child: Icon(
+                                            computer.deviceType == 'macos'
+                                                ? Icons.apple
+                                                : Icons.computer,
+                                            color: Colors.blue,
+                                            size: 24,
+                                          ),
+                                        ),
+                                        const SizedBox(width: 12),
+                                        Expanded(
+                                          child: Column(
+                                            crossAxisAlignment: CrossAxisAlignment.start,
+                                            children: [
+                                              Text(
+                                                computer.alias,
+                                                style: const TextStyle(
+                                                  fontWeight: FontWeight.w500,
+                                                  fontSize: 15,
+                                                ),
+                                                maxLines: 1,
+                                                overflow: TextOverflow.ellipsis,
+                                              ),
+                                              const SizedBox(height: 2),
+                                              Text(
+                                                computer.ip,
+                                                style: TextStyle(
+                                                  color: Colors.grey.shade600,
+                                                  fontSize: 12,
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                        Icon(
+                                          Icons.chevron_right,
+                                          color: Colors.grey.shade400,
+                                        ),
+                                      ],
+                                    ),
                                   ),
                                 ),
-                                TextButton(
-                                  onPressed: () => _showServerSelectionDialog(computers),
-                                  child: const Text('选择'),
-                                ),
-                              ],
-                            ),
+                              )),
+                            ],
                           );
                         },
                       );
