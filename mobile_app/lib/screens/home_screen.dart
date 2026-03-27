@@ -948,26 +948,19 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
             if (_tipMessage != null)
               Positioned(
-                top: 0,
-                left: 16,
-                right: 16,
-                child: SafeArea(
+                top: 8,
+                left: 0,
+                right: 0,
+                child: Center(
                   child: Material(
                     color: Colors.transparent,
                     child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
                       decoration: BoxDecoration(
                         color: _tipIsError
-                            ? Colors.red.withOpacity(0.85)
-                            : Colors.green.withOpacity(0.85),
-                        borderRadius: BorderRadius.circular(8),
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.black.withOpacity(0.1),
-                            blurRadius: 8,
-                            offset: const Offset(0, 2),
-                          ),
-                        ],
+                            ? Colors.red.withOpacity(0.6)
+                            : Colors.green.withOpacity(0.6),
+                        borderRadius: BorderRadius.circular(20),
                       ),
                       child: Text(
                         _tipMessage!,
