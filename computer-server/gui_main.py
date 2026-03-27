@@ -10,17 +10,21 @@ import os
 import asyncio
 import threading
 import platform
+import queue
 
 if platform.system() == 'Windows':
     import ctypes
-    ctypes.windll.shcore.SetProcessDpiAwareness(1)
+    try:
+        ctypes.windll.shcore.SetProcessDpiAwareness(1)
+    except Exception:
+        pass
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 import pystray
 from PIL import Image
 import tkinter as tk
-from tkinter import ttk, messagebox, simpledialog
+from tkinter import ttk, messagebox
 
 from config import Config
 from websocket_server import get_server
@@ -37,10 +41,15 @@ class LogWindow:
         self.log_manager = get_log_manager()
     
     def show(self):
-        if self.window is not None and self.window.winfo_exists():
-            self.window.lift()
-            self.window.focus_force()
-            return
+        if self.window is not None:
+            try:
+                if self.window.winfo_exists():
+                    self.window.lift()
+                    self.window.focus_force()
+                    return
+            except tk.TclError:
+                self.window = None
+                self.text_widget = None
         
         self.window = tk.Toplevel(self.root)
         self.window.title("运行日志")
@@ -52,6 +61,7 @@ class LogWindow:
         self.log_manager.add_callback(self._append_log)
         
         self.window.protocol("WM_DELETE_WINDOW", self._on_close)
+        self.window.focus_force()
     
     def _setup_ui(self):
         main_frame = ttk.Frame(self.window, padding="10")
@@ -103,16 +113,24 @@ class LogWindow:
         self.text_widget.configure(state='disabled')
     
     def _append_log(self, log_message: str):
-        if self.window is None or not self.window.winfo_exists():
+        if self.window is None:
+            return
+        try:
+            if not self.window.winfo_exists():
+                return
+        except tk.TclError:
             return
         
         def append():
             if self.text_widget is None:
                 return
-            self.text_widget.configure(state='normal')
-            self.text_widget.insert(tk.END, log_message + '\n')
-            self.text_widget.see(tk.END)
-            self.text_widget.configure(state='disabled')
+            try:
+                self.text_widget.configure(state='normal')
+                self.text_widget.insert(tk.END, log_message + '\n')
+                self.text_widget.see(tk.END)
+                self.text_widget.configure(state='disabled')
+            except tk.TclError:
+                pass
         
         try:
             self.window.after(0, append)
@@ -128,60 +146,13 @@ class LogWindow:
     
     def _on_close(self):
         self.log_manager.remove_callback(self._append_log)
-        self.window.destroy()
+        try:
+            if self.window:
+                self.window.destroy()
+        except Exception:
+            pass
         self.window = None
         self.text_widget = None
-
-
-class RenameDialog:
-    def __init__(self, root, current_name: str, on_rename_callback):
-        self.root = root
-        self.current_name = current_name
-        self.on_rename_callback = on_rename_callback
-    
-    def show(self):
-        dialog = tk.Toplevel(self.root)
-        dialog.title("重命名服务")
-        dialog.geometry("400x150")
-        dialog.resizable(False, False)
-        dialog.transient(self.root)
-        dialog.grab_set()
-        
-        dialog.update_idletasks()
-        x = self.root.winfo_x() + (self.root.winfo_width() - 400) // 2
-        y = self.root.winfo_y() + (self.root.winfo_height() - 150) // 2
-        dialog.geometry(f"+{x}+{y}")
-        
-        main_frame = ttk.Frame(dialog, padding="20")
-        main_frame.pack(fill=tk.BOTH, expand=True)
-        
-        ttk.Label(main_frame, text="请输入新的服务名称:", font=('Microsoft YaHei UI', 10)).pack(anchor=tk.W)
-        
-        name_var = tk.StringVar(value=self.current_name)
-        entry = ttk.Entry(main_frame, textvariable=name_var, font=('Microsoft YaHei UI', 11))
-        entry.pack(fill=tk.X, pady=10)
-        entry.select_range(0, tk.END)
-        entry.focus_set()
-        
-        button_frame = ttk.Frame(main_frame)
-        button_frame.pack(fill=tk.X, pady=(10, 0))
-        
-        def on_confirm():
-            new_name = name_var.get().strip()
-            if new_name:
-                self.on_rename_callback(new_name)
-                dialog.destroy()
-            else:
-                messagebox.showwarning("提示", "名称不能为空", parent=dialog)
-        
-        def on_cancel(event=None):
-            dialog.destroy()
-        
-        ttk.Button(button_frame, text="确定", command=on_confirm, width=10).pack(side=tk.RIGHT, padx=5)
-        ttk.Button(button_frame, text="取消", command=on_cancel, width=10).pack(side=tk.RIGHT, padx=5)
-        
-        entry.bind('<Return>', lambda e: on_confirm())
-        entry.bind('<Escape>', lambda e: on_cancel())
 
 
 class TrayApplication:
@@ -192,15 +163,15 @@ class TrayApplication:
         self.log_window = None
         self.root = None
         self.log_manager = get_log_manager()
-        
-        self._setup_tk_root()
+        self.action_queue = queue.Queue()
+        self.exit_requested = False
     
     def _setup_tk_root(self):
         self.root = tk.Tk()
         self.root.withdraw()
         self.root.title("打字助手")
-        
-        self.root.update()
+        self.root.geometry("1x1+0+0")
+        self.root.overrideredirect(True)
         
         self.log_window = LogWindow(self.root)
     
@@ -241,20 +212,91 @@ class TrayApplication:
                 enabled=False
             ),
             pystray.Menu.SEPARATOR,
-            pystray.MenuItem("日志", self._show_log_window),
-            pystray.MenuItem("重命名", self._show_rename_dialog),
+            pystray.MenuItem("日志", self._queue_show_log),
+            pystray.MenuItem("重命名", self._queue_show_rename),
             pystray.Menu.SEPARATOR,
-            pystray.MenuItem("退出", self._on_exit),
+            pystray.MenuItem("退出", self._queue_exit),
         )
     
+    def _queue_show_log(self, icon=None, item=None):
+        self.action_queue.put('show_log')
+    
+    def _queue_show_rename(self, icon=None, item=None):
+        self.action_queue.put('show_rename')
+    
+    def _queue_exit(self, icon=None, item=None):
+        self.action_queue.put('exit')
+    
+    def _process_actions(self):
+        try:
+            while True:
+                try:
+                    action = self.action_queue.get_nowait()
+                    if action == 'show_log':
+                        self._show_log_window()
+                    elif action == 'show_rename':
+                        self._show_rename_dialog()
+                    elif action == 'exit':
+                        self._do_exit()
+                except queue.Empty:
+                    break
+        except Exception as e:
+            print(f"处理动作错误: {e}")
+        
+        if self.running:
+            self.root.after(100, self._process_actions)
+    
     def _show_log_window(self):
-        self.root.after(0, lambda: self.log_window.show())
+        if self.log_window:
+            self.log_window.show()
     
     def _show_rename_dialog(self):
-        def show():
-            dialog = RenameDialog(self.root, self.server_name, self._on_rename)
-            dialog.show()
-        self.root.after(0, show)
+        dialog = tk.Toplevel(self.root)
+        dialog.title("重命名服务")
+        dialog.geometry("400x160")
+        dialog.resizable(False, False)
+        dialog.transient(self.root)
+        
+        dialog.update_idletasks()
+        screen_width = dialog.winfo_screenwidth()
+        screen_height = dialog.winfo_screenheight()
+        x = (screen_width - 400) // 2
+        y = (screen_height - 160) // 2
+        dialog.geometry(f"400x160+{x}+{y}")
+        
+        main_frame = ttk.Frame(dialog, padding="20")
+        main_frame.pack(fill=tk.BOTH, expand=True)
+        
+        ttk.Label(main_frame, text="请输入新的服务名称:", font=('Microsoft YaHei UI', 10)).pack(anchor=tk.W)
+        
+        name_var = tk.StringVar(value=self.server_name or "")
+        entry = ttk.Entry(main_frame, textvariable=name_var, font=('Microsoft YaHei UI', 11))
+        entry.pack(fill=tk.X, pady=10)
+        entry.select_range(0, tk.END)
+        entry.focus_set()
+        
+        button_frame = ttk.Frame(main_frame)
+        button_frame.pack(fill=tk.X, pady=(10, 0))
+        
+        def on_confirm():
+            new_name = name_var.get().strip()
+            if new_name:
+                self._on_rename(new_name)
+                dialog.destroy()
+            else:
+                messagebox.showwarning("提示", "名称不能为空", parent=dialog)
+        
+        def on_cancel():
+            dialog.destroy()
+        
+        ttk.Button(button_frame, text="确定", command=on_confirm, width=10).pack(side=tk.RIGHT, padx=5)
+        ttk.Button(button_frame, text="取消", command=on_cancel, width=10).pack(side=tk.RIGHT, padx=5)
+        
+        entry.bind('<Return>', lambda e: on_confirm())
+        entry.bind('<Escape>', lambda e: on_cancel())
+        
+        dialog.grab_set()
+        dialog.focus_force()
     
     def _on_rename(self, new_name: str):
         self.server_name = new_name
@@ -266,8 +308,14 @@ class TrayApplication:
         
         print(f"服务名称已更新为: {new_name}")
     
-    def _on_exit(self, icon, item):
-        if messagebox.askyesno("确认退出", "确定要退出打字助手吗？\n退出后手机将无法连接。"):
+    def _do_exit(self):
+        result = messagebox.askyesno(
+            "确认退出",
+            "确定要退出打字助手吗？\n退出后手机将无法连接。",
+            parent=self.root
+        )
+        
+        if result:
             self.running = False
             
             server = get_server()
@@ -275,11 +323,10 @@ class TrayApplication:
             server.stop()
             discovery.stop()
             
-            if icon:
-                icon.stop()
+            if self.icon:
+                self.icon.stop()
             
             self.root.quit()
-            sys.exit(0)
     
     def _run_async_server(self):
         async def run():
@@ -323,6 +370,7 @@ class TrayApplication:
         )
         
         def update_tooltip():
+            import time
             while self.running:
                 try:
                     if self.icon and self.server_name:
@@ -330,28 +378,28 @@ class TrayApplication:
                         self.icon.title = status
                 except Exception:
                     pass
-                import time
                 time.sleep(2)
         
         tooltip_thread = threading.Thread(target=update_tooltip, daemon=True)
         tooltip_thread.start()
         
-        def run_tk():
-            while self.running:
-                try:
-                    self.root.update()
-                    import time
-                    time.sleep(0.05)
-                except Exception:
-                    break
+        tray_thread = threading.Thread(
+            lambda: self.icon.run(),
+            daemon=True
+        )
+        tray_thread.start()
         
-        tk_thread = threading.Thread(target=run_tk, daemon=True)
-        tk_thread.start()
+        import time
+        time.sleep(0.5)
+        
+        self._setup_tk_root()
+        
+        self.root.after(100, self._process_actions)
         
         try:
-            self.icon.run()
+            self.root.mainloop()
         except Exception as e:
-            print(f"托盘运行错误: {e}")
+            print(f"Tkinter错误: {e}")
         finally:
             self.running = False
             self.log_manager.restore_print()
