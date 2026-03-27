@@ -35,6 +35,10 @@ class _HomeScreenState extends State<HomeScreen> {
   Timer? _discoveryTimer;
   List<DiscoveredComputer> _lastDiscoveredComputers = [];
 
+  String? _tipMessage;
+  bool _tipIsError = false;
+  Timer? _tipTimer;
+
   @override
   void initState() {
     super.initState();
@@ -45,7 +49,27 @@ class _HomeScreenState extends State<HomeScreen> {
   void dispose() {
     _textController.dispose();
     _discoveryService.dispose();
+    _tipTimer?.cancel();
     super.dispose();
+  }
+
+  void _showTip(String message, {bool isError = false}) {
+    _tipTimer?.cancel();
+    setState(() {
+      _tipMessage = message;
+      _tipIsError = isError;
+    });
+    _tipTimer = Timer(const Duration(seconds: 2), () {
+      if (mounted) {
+        setState(() {
+          _tipMessage = null;
+        });
+      }
+    });
+  }
+
+  void _showSnackBar(String message, {bool isError = true}) {
+    _showTip(message, isError: isError);
   }
 
   void _showHistoryDialog() {
@@ -423,19 +447,6 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
-  void _showSnackBar(String message, {bool isError = true}) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          message,
-          style: const TextStyle(fontSize: Constants.fontSizeNormal),
-        ),
-        backgroundColor: isError ? Colors.red : Colors.green,
-        duration: const Duration(seconds: 2),
-      ),
-    );
-  }
-
   void _showServerSelectionDialog(List<DiscoveredComputer> computers) {
     if (_isShowingServerList) return;
     _isShowingServerList = true;
@@ -579,353 +590,389 @@ class _HomeScreenState extends State<HomeScreen> {
         ],
       ),
       body: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.all(Constants.paddingNormal),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Consumer<WebSocketService>(
-                builder: (context, wsService, child) {
-                  final connectionModel = wsService.connectionModel;
+        child: Stack(
+          children: [
+            Padding(
+              padding: const EdgeInsets.all(Constants.paddingNormal),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Consumer<WebSocketService>(
+                    builder: (context, wsService, child) {
+                      final connectionModel = wsService.connectionModel;
 
-                  if (connectionModel.isConnected) {
-                    return Container(
-                      padding: const EdgeInsets.all(12),
-                      margin: const EdgeInsets.only(bottom: 8),
-                      decoration: BoxDecoration(
-                        color: Colors.green.withOpacity(0.1),
-                        borderRadius: BorderRadius.circular(8),
-                        border: Border.all(color: Colors.green.withOpacity(0.3)),
-                      ),
-                      child: Row(
-                        children: [
-                          Container(
-                            padding: const EdgeInsets.all(8),
-                            decoration: BoxDecoration(
-                              color: Colors.green.withOpacity(0.2),
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                            child: const Icon(Icons.computer, color: Colors.green, size: 24),
-                          ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Row(
-                                  children: [
-                                    const Text(
-                                      '已连接: ',
-                                      style: TextStyle(
-                                        color: Colors.green,
-                                        fontWeight: FontWeight.w500,
-                                      ),
-                                    ),
-                                    Expanded(
-                                      child: Text(
-                                        connectionModel.computerName.isNotEmpty
-                                            ? connectionModel.computerName
-                                            : connectionModel.computerIp,
-                                        style: const TextStyle(
-                                          color: Colors.green,
-                                          fontWeight: FontWeight.bold,
-                                        ),
-                                        overflow: TextOverflow.ellipsis,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                                const SizedBox(height: 2),
-                                Text(
-                                  connectionModel.computerIp,
-                                  style: TextStyle(
-                                    color: Colors.green.shade700,
-                                    fontSize: 12,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                          TextButton.icon(
-                            onPressed: _showServerListPopup,
-                            icon: const Icon(Icons.swap_horiz, size: 18),
-                            label: const Text('切换'),
-                            style: TextButton.styleFrom(
-                              foregroundColor: Colors.green.shade700,
-                            ),
-                          ),
-                        ],
-                      ),
-                    );
-                  }
-
-                  if (connectionModel.isConnecting) {
-                    return Container(
-                      padding: const EdgeInsets.all(12),
-                      margin: const EdgeInsets.only(bottom: 8),
-                      decoration: BoxDecoration(
-                        color: Colors.orange.withOpacity(0.1),
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: Row(
-                        children: [
-                          const SizedBox(
-                            width: 20,
-                            height: 20,
-                            child: CircularProgressIndicator(strokeWidth: 2, color: Colors.orange),
-                          ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: Text(
-                              '正在连接 ${connectionModel.computerIp}...',
-                              style: const TextStyle(color: Colors.orange),
-                            ),
-                          ),
-                        ],
-                      ),
-                    );
-                  }
-
-                  if (connectionModel.status == ConnectionStatus.error) {
-                    return Container(
-                      padding: const EdgeInsets.all(12),
-                      margin: const EdgeInsets.only(bottom: 8),
-                      decoration: BoxDecoration(
-                        color: Colors.red.withOpacity(0.1),
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: Row(
-                        children: [
-                          const Icon(Icons.error_outline, color: Colors.red, size: 20),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: Text(
-                              connectionModel.errorMessage.isNotEmpty
-                                  ? connectionModel.errorMessage
-                                  : '连接失败',
-                              style: const TextStyle(color: Colors.red),
-                              maxLines: 2,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ),
-                          TextButton(
-                            onPressed: _showServerListPopup,
-                            child: const Text('重试'),
-                          ),
-                        ],
-                      ),
-                    );
-                  }
-
-                  return StreamBuilder<List<DiscoveredComputer>>(
-                    stream: _discoveryService.computersStream,
-                    initialData: _discoveryService.discoveredComputers,
-                    builder: (context, snapshot) {
-                      final computers = snapshot.data ?? [];
-                      final isScanning = _discoveryService.isScanning;
-
-                      if (computers.isEmpty) {
+                      if (connectionModel.isConnected) {
                         return Container(
                           padding: const EdgeInsets.all(12),
                           margin: const EdgeInsets.only(bottom: 8),
                           decoration: BoxDecoration(
-                            color: Colors.blue.withOpacity(0.1),
+                            color: Colors.green.withOpacity(0.1),
                             borderRadius: BorderRadius.circular(8),
+                            border: Border.all(color: Colors.green.withOpacity(0.3)),
                           ),
                           child: Row(
                             children: [
-                              if (isScanning)
-                                const SizedBox(
-                                  width: 16,
-                                  height: 16,
-                                  child: CircularProgressIndicator(strokeWidth: 2),
-                                )
-                              else
-                                const Icon(Icons.info_outline, color: Colors.blue, size: 20),
+                              Container(
+                                padding: const EdgeInsets.all(8),
+                                decoration: BoxDecoration(
+                                  color: Colors.green.withOpacity(0.2),
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                child: const Icon(Icons.computer, color: Colors.green, size: 24),
+                              ),
                               const SizedBox(width: 12),
                               Expanded(
-                                child: Text(
-                                  isScanning
-                                      ? '正在搜索局域网中的电脑...'
-                                      : '未发现设备，点击右侧手动输入',
-                                  style: const TextStyle(color: Colors.blue),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Row(
+                                      children: [
+                                        const Text(
+                                          '已连接: ',
+                                          style: TextStyle(
+                                            color: Colors.green,
+                                            fontWeight: FontWeight.w500,
+                                          ),
+                                        ),
+                                        Expanded(
+                                          child: Text(
+                                            connectionModel.computerName.isNotEmpty
+                                                ? connectionModel.computerName
+                                                : connectionModel.computerIp,
+                                            style: const TextStyle(
+                                              color: Colors.green,
+                                              fontWeight: FontWeight.bold,
+                                            ),
+                                            overflow: TextOverflow.ellipsis,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                    const SizedBox(height: 2),
+                                    Text(
+                                      connectionModel.computerIp,
+                                      style: TextStyle(
+                                        color: Colors.green.shade700,
+                                        fontSize: 12,
+                                      ),
+                                    ),
+                                  ],
                                 ),
                               ),
-                              TextButton(
+                              TextButton.icon(
                                 onPressed: _showServerListPopup,
-                                child: const Text('手动输入'),
+                                icon: const Icon(Icons.swap_horiz, size: 18),
+                                label: const Text('切换'),
+                                style: TextButton.styleFrom(
+                                  foregroundColor: Colors.green.shade700,
+                                ),
                               ),
                             ],
                           ),
                         );
                       }
 
-                      return Container(
-                        padding: const EdgeInsets.all(12),
-                        margin: const EdgeInsets.only(bottom: 8),
-                        decoration: BoxDecoration(
-                          color: Colors.green.withOpacity(0.1),
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        child: Row(
-                          children: [
-                            const Icon(Icons.check_circle, color: Colors.green, size: 20),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              child: Text(
-                                '发现 ${computers.length} 台电脑',
-                                style: const TextStyle(color: Colors.green),
+                      if (connectionModel.isConnecting) {
+                        return Container(
+                          padding: const EdgeInsets.all(12),
+                          margin: const EdgeInsets.only(bottom: 8),
+                          decoration: BoxDecoration(
+                            color: Colors.orange.withOpacity(0.1),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Row(
+                            children: [
+                              const SizedBox(
+                                width: 20,
+                                height: 20,
+                                child: CircularProgressIndicator(strokeWidth: 2, color: Colors.orange),
                               ),
-                            ),
-                            TextButton(
-                              onPressed: () => _showServerSelectionDialog(computers),
-                              child: const Text('选择'),
-                            ),
-                          ],
-                        ),
-                      );
-                    },
-                  );
-                },
-              ),
-              Flexible(
-                flex: 3,
-                child: Container(
-                  decoration: BoxDecoration(
-                    border: Border.all(color: Colors.grey),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Stack(
-                    children: [
-                      TextField(
-                        controller: _textController,
-                        maxLines: null,
-                        expands: true,
-                        textAlignVertical: TextAlignVertical.top,
-                        style: const TextStyle(
-                          fontSize: Constants.fontSizeLarge,
-                        ),
-                        decoration: InputDecoration(
-                          hintText: '点击此处手写或输入文字...',
-                          hintStyle: const TextStyle(
-                            fontSize: Constants.fontSizeLarge,
-                            color: Colors.grey,
-                          ),
-                          contentPadding: const EdgeInsets.fromLTRB(
-                            Constants.paddingNormal,
-                            Constants.paddingNormal,
-                            48,
-                            Constants.paddingNormal,
-                          ),
-                          border: InputBorder.none,
-                        ),
-                      ),
-                      Positioned(
-                        top: 8,
-                        right: 8,
-                        child: ValueListenableBuilder<TextEditingValue>(
-                          valueListenable: _textController,
-                          builder: (context, value, child) {
-                            if (value.text.isEmpty) {
-                              return const SizedBox.shrink();
-                            }
-                            return GestureDetector(
-                              onTap: () => _textController.clear(),
-                              child: Container(
-                                padding: const EdgeInsets.all(4),
-                                decoration: BoxDecoration(
-                                  color: Colors.grey[300],
-                                  shape: BoxShape.circle,
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: Text(
+                                  '正在连接 ${connectionModel.computerIp}...',
+                                  style: const TextStyle(color: Colors.orange),
                                 ),
-                                child: Icon(
-                                  Icons.close,
-                                  size: 16,
-                                  color: Colors.grey[700],
+                              ),
+                            ],
+                          ),
+                        );
+                      }
+
+                      if (connectionModel.status == ConnectionStatus.error) {
+                        return Container(
+                          padding: const EdgeInsets.all(12),
+                          margin: const EdgeInsets.only(bottom: 8),
+                          decoration: BoxDecoration(
+                            color: Colors.red.withOpacity(0.1),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Row(
+                            children: [
+                              const Icon(Icons.error_outline, color: Colors.red, size: 20),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: Text(
+                                  connectionModel.errorMessage.isNotEmpty
+                                      ? connectionModel.errorMessage
+                                      : '连接失败',
+                                  style: const TextStyle(color: Colors.red),
+                                  maxLines: 2,
+                                  overflow: TextOverflow.ellipsis,
                                 ),
+                              ),
+                              TextButton(
+                                onPressed: _showServerListPopup,
+                                child: const Text('重试'),
+                              ),
+                            ],
+                          ),
+                        );
+                      }
+
+                      return StreamBuilder<List<DiscoveredComputer>>(
+                        stream: _discoveryService.computersStream,
+                        initialData: _discoveryService.discoveredComputers,
+                        builder: (context, snapshot) {
+                          final computers = snapshot.data ?? [];
+                          final isScanning = _discoveryService.isScanning;
+
+                          if (computers.isEmpty) {
+                            return Container(
+                              padding: const EdgeInsets.all(12),
+                              margin: const EdgeInsets.only(bottom: 8),
+                              decoration: BoxDecoration(
+                                color: Colors.blue.withOpacity(0.1),
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: Row(
+                                children: [
+                                  if (isScanning)
+                                    const SizedBox(
+                                      width: 16,
+                                      height: 16,
+                                      child: CircularProgressIndicator(strokeWidth: 2),
+                                    )
+                                  else
+                                    const Icon(Icons.info_outline, color: Colors.blue, size: 20),
+                                  const SizedBox(width: 12),
+                                  Expanded(
+                                    child: Text(
+                                      isScanning
+                                          ? '正在搜索局域网中的电脑...'
+                                          : '未发现设备，点击右侧手动输入',
+                                      style: const TextStyle(color: Colors.blue),
+                                    ),
+                                  ),
+                                  TextButton(
+                                    onPressed: _showServerListPopup,
+                                    child: const Text('手动输入'),
+                                  ),
+                                ],
                               ),
                             );
-                          },
+                          }
+
+                          return Container(
+                            padding: const EdgeInsets.all(12),
+                            margin: const EdgeInsets.only(bottom: 8),
+                            decoration: BoxDecoration(
+                              color: Colors.green.withOpacity(0.1),
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: Row(
+                              children: [
+                                const Icon(Icons.check_circle, color: Colors.green, size: 20),
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  child: Text(
+                                    '发现 ${computers.length} 台电脑',
+                                    style: const TextStyle(color: Colors.green),
+                                  ),
+                                ),
+                                TextButton(
+                                  onPressed: () => _showServerSelectionDialog(computers),
+                                  child: const Text('选择'),
+                                ),
+                              ],
+                            ),
+                          );
+                        },
+                      );
+                    },
+                  ),
+                  Flexible(
+                    flex: 3,
+                    child: Container(
+                      decoration: BoxDecoration(
+                        border: Border.all(color: Colors.grey),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Stack(
+                        children: [
+                          TextField(
+                            controller: _textController,
+                            maxLines: null,
+                            expands: true,
+                            textAlignVertical: TextAlignVertical.top,
+                            style: const TextStyle(
+                              fontSize: Constants.fontSizeLarge,
+                            ),
+                            decoration: InputDecoration(
+                              hintText: '点击此处手写或输入文字...',
+                              hintStyle: const TextStyle(
+                                fontSize: Constants.fontSizeLarge,
+                                color: Colors.grey,
+                              ),
+                              contentPadding: const EdgeInsets.fromLTRB(
+                                Constants.paddingNormal,
+                                Constants.paddingNormal,
+                                48,
+                                Constants.paddingNormal,
+                              ),
+                              border: InputBorder.none,
+                            ),
+                          ),
+                          Positioned(
+                            top: 8,
+                            right: 8,
+                            child: ValueListenableBuilder<TextEditingValue>(
+                              valueListenable: _textController,
+                              builder: (context, value, child) {
+                                if (value.text.isEmpty) {
+                                  return const SizedBox.shrink();
+                                }
+                                return GestureDetector(
+                                  onTap: () => _textController.clear(),
+                                  child: Container(
+                                    padding: const EdgeInsets.all(4),
+                                    decoration: BoxDecoration(
+                                      color: Colors.grey[300],
+                                      shape: BoxShape.circle,
+                                    ),
+                                    child: Icon(
+                                      Icons.close,
+                                      size: 16,
+                                      color: Colors.grey[700],
+                                    ),
+                                  ),
+                                );
+                              },
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: Constants.paddingNormal),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: ElevatedButton.icon(
+                          onPressed: _takePhoto,
+                          icon: const Icon(Icons.camera_alt, size: 24),
+                          label: const Text(
+                            '拍照',
+                            style: TextStyle(fontSize: Constants.fontSizeNormal),
+                          ),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.blue,
+                            foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(vertical: 12),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: OutlinedButton.icon(
+                          onPressed: _pickFromGallery,
+                          icon: const Icon(Icons.photo_library, size: 24),
+                          label: const Text(
+                            '相册',
+                            style: TextStyle(fontSize: Constants.fontSizeNormal),
+                          ),
+                          style: OutlinedButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(vertical: 12),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: ElevatedButton.icon(
+                          onPressed: _isSending ? null : _sendText,
+                          icon: _isSending
+                              ? const SizedBox(
+                                  width: 20,
+                                  height: 20,
+                                  child: CircularProgressIndicator(
+                                    color: Colors.white,
+                                    strokeWidth: 2,
+                                  ),
+                                )
+                              : const Icon(Icons.send, size: 24),
+                          label: Text(
+                            _isSending ? '发送中' : '发送',
+                            style: const TextStyle(fontSize: Constants.fontSizeNormal),
+                          ),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.green,
+                            foregroundColor: Colors.white,
+                            disabledBackgroundColor: Colors.green.withOpacity(0.5),
+                            padding: const EdgeInsets.symmetric(vertical: 12),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                          ),
                         ),
                       ),
                     ],
                   ),
-                ),
-              ),
-
-              const SizedBox(height: Constants.paddingNormal),
-
-              Row(
-                children: [
-                  Expanded(
-                    child: ElevatedButton.icon(
-                      onPressed: _takePhoto,
-                      icon: const Icon(Icons.camera_alt, size: 24),
-                      label: const Text(
-                        '拍照',
-                        style: TextStyle(fontSize: Constants.fontSizeNormal),
-                      ),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.blue,
-                        foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(vertical: 12),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: OutlinedButton.icon(
-                      onPressed: _pickFromGallery,
-                      icon: const Icon(Icons.photo_library, size: 24),
-                      label: const Text(
-                        '相册',
-                        style: TextStyle(fontSize: Constants.fontSizeNormal),
-                      ),
-                      style: OutlinedButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(vertical: 12),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: ElevatedButton.icon(
-                      onPressed: _isSending ? null : _sendText,
-                      icon: _isSending
-                          ? const SizedBox(
-                              width: 20,
-                              height: 20,
-                              child: CircularProgressIndicator(
-                                color: Colors.white,
-                                strokeWidth: 2,
-                              ),
-                            )
-                          : const Icon(Icons.send, size: 24),
-                      label: Text(
-                        _isSending ? '发送中' : '发送',
-                        style: const TextStyle(fontSize: Constants.fontSizeNormal),
-                      ),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.green,
-                        foregroundColor: Colors.white,
-                        disabledBackgroundColor: Colors.green.withOpacity(0.5),
-                        padding: const EdgeInsets.symmetric(vertical: 12),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                      ),
-                    ),
-                  ),
+                  const SizedBox(height: Constants.paddingSmall),
                 ],
               ),
-
-              const SizedBox(height: Constants.paddingSmall),
-            ],
-          ),
+            ),
+            if (_tipMessage != null)
+              Positioned(
+                top: 0,
+                left: 16,
+                right: 16,
+                child: SafeArea(
+                  child: Material(
+                    color: Colors.transparent,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                      decoration: BoxDecoration(
+                        color: _tipIsError
+                            ? Colors.red.withOpacity(0.85)
+                            : Colors.green.withOpacity(0.85),
+                        borderRadius: BorderRadius.circular(8),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withOpacity(0.1),
+                            blurRadius: 8,
+                            offset: const Offset(0, 2),
+                          ),
+                        ],
+                      ),
+                      child: Text(
+                        _tipMessage!,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 14,
+                        ),
+                        textAlign: TextAlign.center,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+          ],
         ),
       ),
     );
