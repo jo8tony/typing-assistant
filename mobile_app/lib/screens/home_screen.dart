@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:io';
+import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
@@ -469,49 +470,59 @@ class _HomeScreenState extends State<HomeScreen> {
         ),
         content: SizedBox(
           width: double.maxFinite,
+          height: math.min(computers.length * 120 + 100, 400),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text('发现了 ${computers.length} 台电脑：'),
               const SizedBox(height: 16),
-              Flexible(
+              Expanded(
                 child: ListView.builder(
-                  shrinkWrap: true,
                   itemCount: computers.length,
                   itemBuilder: (context, index) {
                     final computer = computers[index];
-                    return Card(
-                      child: ListTile(
-                        leading: Icon(
-                          computer.deviceType == 'macos'
-                              ? Icons.apple
-                              : Icons.computer,
-                        ),
-                        title: Text(computer.alias),
-                        subtitle: Text(computer.ip),
-                        trailing: ElevatedButton(
-                          onPressed: () async {
-                            _isShowingServerList = false;
-                            Navigator.pop(context);
+                    return Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 4),
+                      child: Card(
+                        child: ListTile(
+                          leading: Icon(
+                            computer.deviceType == 'macos'
+                                ? Icons.apple
+                                : Icons.computer,
+                          ),
+                          title: Text(
+                            computer.alias,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          subtitle: Text(
+                            computer.ip,
+                            maxLines: 1,
+                          ),
+                          trailing: ElevatedButton(
+                            onPressed: () async {
+                              _isShowingServerList = false;
+                              Navigator.pop(context);
 
-                            final wsService = context.read<WebSocketService>();
-                            final success = await wsService.connect(
-                              computer,
-                              autoReconnect: true,
-                            );
-
-                            if (success && mounted) {
-                              _showSnackBar(
-                                '已连接到 ${computer.alias}',
-                                isError: false,
+                              final wsService = context.read<WebSocketService>();
+                              final success = await wsService.connect(
+                                computer,
+                                autoReconnect: true,
                               );
-                            } else if (mounted) {
-                              final errorMsg = wsService.connectionModel.errorMessage;
-                              _showSnackBar(errorMsg.isNotEmpty ? errorMsg : '连接失败');
-                            }
-                          },
-                          child: const Text('连接'),
+
+                              if (success && mounted) {
+                                _showSnackBar(
+                                  '已连接到 ${computer.alias}',
+                                  isError: false,
+                                );
+                              } else if (mounted) {
+                                final errorMsg = wsService.connectionModel.errorMessage;
+                                _showSnackBar(errorMsg.isNotEmpty ? errorMsg : '连接失败');
+                              }
+                            },
+                            child: const Text('连接'),
+                          ),
                         ),
                       ),
                     );
