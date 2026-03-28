@@ -84,11 +84,6 @@ class TrayApplication:
         return icon
     
     def _get_menu(self) -> pystray.Menu:
-        try:
-            mode_text = f"输入模式: {self.simulator.get_input_mode_display()}"
-        except:
-            mode_text = "输入模式: 剪贴板粘贴 (pynput/pyautogui)"
-        
         return pystray.Menu(
             pystray.MenuItem(
                 lambda text: f"【{self.server_name or '打字助手'}】",
@@ -97,7 +92,7 @@ class TrayApplication:
             ),
             pystray.Menu.SEPARATOR,
             pystray.MenuItem(
-                mode_text,
+                lambda text: self._get_mode_display_text(),
                 self._show_mode_dialog,
             ),
             pystray.Menu.SEPARATOR,
@@ -107,13 +102,25 @@ class TrayApplication:
             pystray.MenuItem("退出", self._queue_exit),
         )
     
+    def _get_mode_display_text(self):
+        try:
+            return f"输入模式: {self.simulator.get_input_mode_display()}"
+        except Exception as e:
+            print(f"获取输入模式显示文本失败: {e}")
+            return "输入模式: 剪贴板粘贴 (pynput/pyautogui)"
+    
     def _show_mode_dialog(self, icon=None, item=None):
         self.action_queue.put('show_mode')
     
     def _update_menu(self):
         if self.icon:
-            self.icon.menu = self._get_menu()
-            self.icon.update_menu()
+            try:
+                print(f"[DEBUG] 更新菜单，当前模式: {self.simulator.get_input_mode_display()}")
+                self.icon.menu = self._get_menu()
+                self.icon.update_menu()
+                print(f"[DEBUG] 菜单更新完成")
+            except Exception as e:
+                print(f"[ERROR] 更新菜单失败: {e}")
     
     def _queue_show_log(self, icon=None, item=None):
         self.action_queue.put('show_log')
@@ -432,6 +439,7 @@ class TrayApplication:
         cancel_btn.pack(side=tk.RIGHT, padx=5)
         
         self.mode_dialog.protocol("WM_DELETE_WINDOW", on_cancel)
+        self.mode_dialog.grab_set()
         self.mode_dialog.focus_force()
     
     def _do_exit(self):
