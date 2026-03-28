@@ -401,7 +401,9 @@ class TrayApplication:
         
         def on_confirm():
             selected_mode = mode_var.get()
+            print(f"[DEBUG] 选择的模式: {selected_mode}")
             self.simulator.set_input_mode(selected_mode)
+            print(f"[DEBUG] 当前模式: {self.simulator.get_input_mode()}")
             self._update_menu()
             try:
                 self.mode_dialog.destroy()
@@ -422,8 +424,7 @@ class TrayApplication:
         cancel_btn.pack(side=tk.RIGHT, padx=5)
         
         self.mode_dialog.protocol("WM_DELETE_WINDOW", on_cancel)
-        self.mode_dialog.grab_set()
-        self.mode_dialog.wait_window()
+        self.mode_dialog.focus_force()
     
     def _do_exit(self):
         if self.exit_dialog_open:
