@@ -416,12 +416,15 @@ class TrayApplication:
                 pass
             self.mode_dialog = None
         
-        ttk.Button(button_frame, text="确定", command=on_confirm, width=10).pack(side=tk.RIGHT, padx=5)
-        ttk.Button(button_frame, text="取消", command=on_cancel, width=10).pack(side=tk.RIGHT, padx=5)
+        confirm_btn = ttk.Button(button_frame, text="确定", command=on_confirm, width=10)
+        confirm_btn.pack(side=tk.RIGHT, padx=5)
+        cancel_btn = ttk.Button(button_frame, text="取消", command=on_cancel, width=10)
+        cancel_btn.pack(side=tk.RIGHT, padx=5)
         
         self.mode_dialog.protocol("WM_DELETE_WINDOW", on_cancel)
+        self.mode_dialog.transient(self.root)
         self.mode_dialog.grab_set()
-        self.mode_dialog.focus_force()
+        confirm_btn.focus_set()
     
     def _do_exit(self):
         if self.exit_dialog_open:
