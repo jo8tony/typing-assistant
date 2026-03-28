@@ -39,6 +39,22 @@ class InputSimulator:
         except ImportError:
             print("警告: pyautogui 未安装")
         
+        # 尝试导入 pyperclip 用于剪贴板操作
+        self.pyperclip = None
+        try:
+            import pyperclip
+            self.pyperclip = pyperclip
+            print("pyperclip 已加载用于剪贴板操作")
+        except ImportError:
+            print("警告: pyperclip 未安装，将使用 PowerShell 操作剪贴板")
+        
+        # Windows 下隐藏子进程窗口的配置
+        self._startupinfo = None
+        if self.system == "Windows":
+            self._startupinfo = subprocess.STARTUPINFO()
+            self._startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+            self._startupinfo.wShowWindow = subprocess.SW_HIDE
+        
         # 保存原始剪贴板内容
         self._original_clipboard = None
     
@@ -187,31 +203,36 @@ class InputSimulator:
         """
         try:
             # 保存当前剪贴板内容
-            try:
-                result = subprocess.run(
-                    ['powershell', '-Command', 'Get-Clipboard'],
-                    capture_output=True,
-                    text=True,
-                    timeout=5
-                )
-                if result.returncode == 0:
-                    self._original_clipboard = result.stdout
-            except Exception:
-                self._original_clipboard = None
+            self._original_clipboard = None
+            if self.pyperclip:
+                try:
+                    self._original_clipboard = self.pyperclip.paste()
+                except Exception:
+                    pass
             
             # 将文字复制到剪贴板
-            escaped_text = text.replace("'", "''")
-            set_clipboard_script = f"Set-Clipboard -Value '{escaped_text}'"
-            result = subprocess.run(
-                ['powershell', '-Command', set_clipboard_script],
-                capture_output=True,
-                text=True,
-                timeout=5
-            )
-            
-            if result.returncode != 0:
-                print(f"设置剪贴板失败: {result.stderr}")
-                return False
+            if self.pyperclip:
+                try:
+                    self.pyperclip.copy(text)
+                except Exception as e:
+                    print(f"pyperclip 设置剪贴板失败: {e}")
+                    return False
+            else:
+                # 使用 PowerShell 作为备选（隐藏窗口）
+                escaped_text = text.replace("'", "''")
+                set_clipboard_script = f"Set-Clipboard -Value '{escaped_text}'"
+                result = subprocess.run(
+                    ['powershell', '-Command', set_clipboard_script],
+                    capture_output=True,
+                    text=True,
+                    timeout=5,
+                    startupinfo=self._startupinfo,
+                    creationflags=subprocess.CREATE_NO_WINDOW if self.system == "Windows" else 0
+                )
+                
+                if result.returncode != 0:
+                    print(f"设置剪贴板失败: {result.stderr}")
+                    return False
             
             # 等待剪贴板更新
             time.sleep(0.1)
@@ -238,20 +259,8 @@ class InputSimulator:
                 except Exception as e:
                     print(f"pyautogui 粘贴失败: {e}")
             
-            # 使用 PowerShell SendKeys 作为最后的备选
-            script = 'Add-Type -AssemblyName System.Windows.Forms; [System.Windows.Forms.SendKeys]::SendWait("^v")'
-            result = subprocess.run(
-                ['powershell', '-Command', script],
-                capture_output=True,
-                text=True,
-                timeout=5
-            )
-            if result.returncode == 0:
-                print("使用剪贴板粘贴成功 (PowerShell)")
-                return True
-            else:
-                print(f"PowerShell 粘贴失败: {result.stderr}")
-                return False
+            print("无法执行粘贴操作")
+            return False
                 
         except Exception as e:
             print(f"剪贴板粘贴失败: {e}")
@@ -261,14 +270,8 @@ class InputSimulator:
             if self._original_clipboard is not None:
                 try:
                     time.sleep(0.2)
-                    escaped_original = self._original_clipboard.replace("'", "''")
-                    restore_script = f"Set-Clipboard -Value '{escaped_original}'"
-                    subprocess.run(
-                        ['powershell', '-Command', restore_script],
-                        capture_output=True,
-                        text=True,
-                        timeout=5
-                    )
+                    if self.pyperclip:
+                        self.pyperclip.copy(self._original_clipboard)
                 except Exception:
                     pass
     
