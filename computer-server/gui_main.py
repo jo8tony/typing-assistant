@@ -43,7 +43,6 @@ class TrayApplication:
         self.log_window = None
         self.log_text = None
         self.rename_dialog = None
-        self.mode_dialog = None
         self.exit_dialog_open = False
         self.log_manager = get_log_manager()
         self.action_queue = queue.Queue()
@@ -91,9 +90,12 @@ class TrayApplication:
                 default=True
             ),
             pystray.Menu.SEPARATOR,
-            pystray.MenuItem(
-                lambda text: self._get_mode_display_text(),
-                self._show_mode_dialog,
+            pystray.Menu(
+                lambda: (
+                    pystray.MenuItem(mode_name, self._create_mode_handler(mode_id), checked=lambda item, m=mode_id: self._is_current_mode(m))
+                    for mode_id, mode_name in INPUT_MODES
+                ),
+                lambda text: f"输入模式：{self.simulator.get_input_mode_display()}",
             ),
             pystray.Menu.SEPARATOR,
             pystray.MenuItem("日志", self._queue_show_log),
@@ -102,15 +104,17 @@ class TrayApplication:
             pystray.MenuItem("退出", self._queue_exit),
         )
     
-    def _get_mode_display_text(self):
-        try:
-            return f"输入模式：{self.simulator.get_input_mode_display()}"
-        except Exception as e:
-            print(f"获取输入模式显示文本失败：{e}")
-            return "输入模式：剪贴板粘贴 (pynput/pyautogui)"
+    def _is_current_mode(self, mode_id: str) -> bool:
+        return self.simulator.get_input_mode() == mode_id
     
-    def _show_mode_dialog(self, icon=None, item=None):
-        self.action_queue.put('show_mode')
+    def _create_mode_handler(self, mode_id: str):
+        def handler(icon=None, item=None):
+            current_mode = self.simulator.get_input_mode()
+            if mode_id != current_mode:
+                self.simulator.set_input_mode(mode_id)
+                print(f"模式已切换：{current_mode} -> {self.simulator.get_input_mode_display()}")
+                self._refresh_tray_menu()
+        return handler
     
     def _refresh_tray_menu(self):
         """刷新托盘菜单"""
@@ -140,8 +144,6 @@ class TrayApplication:
                         self._show_log_window()
                     elif action == 'show_rename':
                         self._show_rename_dialog()
-                    elif action == 'show_mode':
-                        self._show_mode_selection_dialog()
                     elif action == 'exit':
                         self._do_exit()
                 except queue.Empty:
@@ -336,118 +338,6 @@ class TrayApplication:
             discovery.device_info['alias'] = new_name
         
         print(f"服务名称已更新为：{new_name}")
-    
-    def _show_mode_selection_dialog(self):
-        if self.mode_dialog is not None:
-            try:
-                if self.mode_dialog.winfo_exists():
-                    self.mode_dialog.lift()
-                    self.mode_dialog.focus_force()
-                    return
-            except tk.TclError:
-                self.mode_dialog = None
-        
-        self.mode_dialog = tk.Toplevel(self.root)
-        self.mode_dialog.title("选择输入模式")
-        self.mode_dialog.geometry("450x400")
-        self.mode_dialog.resizable(False, False)
-        
-        self.mode_dialog.update_idletasks()
-        screen_width = self.mode_dialog.winfo_screenwidth()
-        screen_height = self.mode_dialog.winfo_screenheight()
-        x = (screen_width - 450) // 2
-        y = (screen_height - 400) // 2
-        self.mode_dialog.geometry(f"450x400+{x}+{y}")
-        
-        main_frame = ttk.Frame(self.mode_dialog, padding="20")
-        main_frame.pack(fill=tk.BOTH, expand=True)
-        
-        ttk.Label(main_frame, text="请选择输入模式:", font=('Microsoft YaHei UI', 11, 'bold')).pack(anchor=tk.W, pady=(0, 10))
-        
-        current_mode = self.simulator.get_input_mode()
-        mode_var = tk.StringVar(value=current_mode)
-        
-        list_frame = ttk.Frame(main_frame)
-        list_frame.pack(fill=tk.BOTH, expand=True, pady=5)
-        
-        style = ttk.Style()
-        style.configure('Mode.TRadiobutton', font=('Microsoft YaHei UI', 10), padding=5)
-        
-        for mode_id, mode_name in INPUT_MODES:
-            rb = ttk.Radiobutton(
-                list_frame,
-                text=mode_name,
-                value=mode_id,
-                variable=mode_var,
-                style='Mode.TRadiobutton'
-            )
-            rb.pack(anchor=tk.W, pady=2)
-            
-            if mode_id == current_mode:
-                rb.focus_set()
-        
-        desc_frame = ttk.LabelFrame(main_frame, text="模式说明", padding="10")
-        desc_frame.pack(fill=tk.X, pady=10)
-        
-        desc_text = {
-            "clipboard": "标准剪贴板粘贴，适用于大多数应用",
-            "keyboard": "模拟键盘逐字输入，兼容性好但速度较慢",
-            "sendkeys": "使用 PowerShell SendKeys，适用于某些特殊控件",
-            "sendinput": "使用 Win32 SendInput API，底层输入方式",
-            "keybd_event": "使用 Win32 keybd_event，更底层的输入方式",
-            "clipboard_sendkeys": "剪贴板配合 SendKeys 粘贴，组合方式",
-            "clipboard_delayed": "延迟版剪贴板粘贴，适用于响应较慢的控件",
-            "unicode": "Unicode 字符输入，使用 Alt+数字键方式",
-        }
-        
-        desc_label = ttk.Label(desc_frame, text=desc_text.get(current_mode, ""), font=('Microsoft YaHei UI', 9), wraplength=380)
-        desc_label.pack(fill=tk.X)
-        
-        def update_desc(*args):
-            selected = mode_var.get()
-            desc_label.configure(text=desc_text.get(selected, ""))
-        
-        mode_var.trace('w', update_desc)
-        
-        button_frame = ttk.Frame(main_frame)
-        button_frame.pack(fill=tk.X, pady=(10, 0))
-        
-        def on_confirm():
-            selected_mode = mode_var.get()
-            print(f"[DEBUG] 选择的模式：{selected_mode}")
-            
-            if selected_mode != current_mode:
-                self.simulator.set_input_mode(selected_mode)
-                new_mode = self.simulator.get_input_mode_display()
-                print(f"[DEBUG] 模式已切换：{current_mode} -> {new_mode}")
-                
-                self.root.after(100, self._refresh_tray_menu)
-                
-                messagebox.showinfo("模式切换", f"输入模式已切换为：{new_mode}", parent=self.mode_dialog)
-            else:
-                print(f"[DEBUG] 模式未变化：{selected_mode}")
-            
-            try:
-                self.mode_dialog.destroy()
-            except Exception:
-                pass
-            self.mode_dialog = None
-        
-        def on_cancel():
-            try:
-                self.mode_dialog.destroy()
-            except Exception:
-                pass
-            self.mode_dialog = None
-        
-        confirm_btn = ttk.Button(button_frame, text="确定", command=on_confirm, width=10)
-        confirm_btn.pack(side=tk.RIGHT, padx=5)
-        cancel_btn = ttk.Button(button_frame, text="取消", command=on_cancel, width=10)
-        cancel_btn.pack(side=tk.RIGHT, padx=5)
-        
-        self.mode_dialog.protocol("WM_DELETE_WINDOW", on_cancel)
-        self.mode_dialog.grab_set()
-        self.mode_dialog.focus_force()
     
     def _do_exit(self):
         if self.exit_dialog_open:
