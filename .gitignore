@@ -1,0 +1,11 @@
+.trae/
+*.pyc
+__pycache__/
+.DS_Store
+*.log
+.env
+build/
+dist/
+*.egg-info/
+.idea/
+.vscode/

@@ -99,9 +99,9 @@ class TrayApplication:
         
         return pystray.Menu(
             pystray.MenuItem(
-                lambda text: f"【{self.server_name or '打字助手'}】",
+                lambda text: self.server_name or "打字助手",
                 lambda: None,
-                default=True
+                enabled=False
             ),
             pystray.Menu.SEPARATOR,
             pystray.MenuItem(
