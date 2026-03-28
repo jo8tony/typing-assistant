@@ -7,13 +7,16 @@
 
 import os
 import sys
+import io
+
+sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace')
 
 def convert_png_to_ico(png_path: str, ico_path: str):
     try:
         from PIL import Image
         
         if not os.path.exists(png_path):
-            print(f"PNG 文件不存在: {png_path}")
+            print(f"PNG file not found: {png_path}")
             return False
         
         img = Image.open(png_path)
@@ -35,14 +38,14 @@ def convert_png_to_ico(png_path: str, ico_path: str):
             append_images=icons[1:]
         )
         
-        print(f"成功转换: {png_path} -> {ico_path}")
+        print(f"Success: {png_path} -> {ico_path}")
         return True
         
     except ImportError:
-        print("错误: 未安装 Pillow，请运行: pip install Pillow")
+        print("Error: Pillow not installed, run: pip install Pillow")
         return False
     except Exception as e:
-        print(f"转换失败: {e}")
+        print(f"Failed: {e}")
         return False
 
 
@@ -52,10 +55,10 @@ def main():
     ico_path = os.path.join(script_dir, 'app_icon.ico')
     
     if convert_png_to_ico(png_path, ico_path):
-        print("图标转换完成！")
+        print("Icon conversion complete!")
         sys.exit(0)
     else:
-        print("图标转换失败！")
+        print("Icon conversion failed!")
         sys.exit(1)
 
 

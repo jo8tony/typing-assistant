@@ -422,9 +422,8 @@ class TrayApplication:
         cancel_btn.pack(side=tk.RIGHT, padx=5)
         
         self.mode_dialog.protocol("WM_DELETE_WINDOW", on_cancel)
-        self.mode_dialog.transient(self.root)
         self.mode_dialog.grab_set()
-        confirm_btn.focus_set()
+        self.mode_dialog.wait_window()
     
     def _do_exit(self):
         if self.exit_dialog_open:
