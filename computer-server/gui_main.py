@@ -84,6 +84,11 @@ class TrayApplication:
         return icon
     
     def _get_menu(self) -> pystray.Menu:
+        try:
+            mode_text = f"输入模式: {self.simulator.get_input_mode_display()}"
+        except:
+            mode_text = "输入模式: 剪贴板粘贴 (pynput/pyautogui)"
+        
         return pystray.Menu(
             pystray.MenuItem(
                 lambda text: f"【{self.server_name or '打字助手'}】",
@@ -92,7 +97,7 @@ class TrayApplication:
             ),
             pystray.Menu.SEPARATOR,
             pystray.MenuItem(
-                lambda text: f"输入模式: {self.simulator.get_input_mode_display()}",
+                mode_text,
                 self._show_mode_dialog,
             ),
             pystray.Menu.SEPARATOR,
@@ -108,6 +113,7 @@ class TrayApplication:
     def _update_menu(self):
         if self.icon:
             self.icon.menu = self._get_menu()
+            self.icon.update_menu()
     
     def _queue_show_log(self, icon=None, item=None):
         self.action_queue.put('show_log')
@@ -403,8 +409,10 @@ class TrayApplication:
             selected_mode = mode_var.get()
             print(f"[DEBUG] 选择的模式: {selected_mode}")
             self.simulator.set_input_mode(selected_mode)
-            print(f"[DEBUG] 当前模式: {self.simulator.get_input_mode()}")
+            new_mode = self.simulator.get_input_mode_display()
+            print(f"[DEBUG] 当前模式: {new_mode}")
             self._update_menu()
+            messagebox.showinfo("模式切换", f"输入模式已切换为: {new_mode}", parent=self.root)
             try:
                 self.mode_dialog.destroy()
             except Exception:
@@ -488,11 +496,13 @@ class TrayApplication:
         
         icon_image = self._load_icon()
         
+        menu = self._get_menu()
+        print(f"[DEBUG] 菜单已创建: {menu}")
         self.icon = pystray.Icon(
             'typing_assistant',
             icon_image,
             '打字助手 - 运行中',
-            self._get_menu()
+            menu
         )
         
         def update_tooltip():
