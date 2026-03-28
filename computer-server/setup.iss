@@ -23,7 +23,7 @@ InfoBeforeFile=
 InfoAfterFile=
 OutputDir=dist
 OutputBaseFilename=打字助手-Setup-{#MyAppVersion}
-SetupIconFile=icon.ico
+SetupIconFile=app_icon.ico
 Compression=lzma2/max
 SolidCompression=yes
 WizardStyle=modern
@@ -40,11 +40,12 @@ Name: "english"; MessagesFile: "compiler:Default.isl"
 [Files]
 Source: "dist\打字助手.exe"; DestDir: "{app}"; Flags: ignoreversion
 Source: "app_icon.png"; DestDir: "{app}"; Flags: ignoreversion
+Source: "app_icon.ico"; DestDir: "{app}"; Flags: ignoreversion
 
 [Icons]
-Name: "{group}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"
+Name: "{group}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; IconFilename: "{app}\app_icon.ico"
 Name: "{group}\{cm:UninstallProgram,{#MyAppName}}"; Filename: "{uninstallexe}"
-Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"
+Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; IconFilename: "{app}\app_icon.ico"
 
 [Run]
 Filename: "{app}\{#MyAppExeName}"; Description: "{cm:LaunchProgram,{#StringChange(MyAppName, '&', '&&')}}"; Flags: nowait postinstall skipifsilent

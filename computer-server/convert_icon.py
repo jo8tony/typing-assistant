@@ -49,7 +49,7 @@ def convert_png_to_ico(png_path: str, ico_path: str):
 def main():
     script_dir = os.path.dirname(os.path.abspath(__file__))
     png_path = os.path.join(script_dir, 'app_icon.png')
-    ico_path = os.path.join(script_dir, 'icon.ico')
+    ico_path = os.path.join(script_dir, 'app_icon.ico')
     
     if convert_png_to_ico(png_path, ico_path):
         print("图标转换完成！")
