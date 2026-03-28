@@ -29,6 +29,9 @@ class InputSimulator:
             print("pyautogui 已加载作为备选方案")
         except ImportError:
             print("警告: pyautogui 未安装")
+        
+        # 保存原始剪贴板内容
+        self._original_clipboard = None
     
     def type_text(self, text: str) -> bool:
         """
@@ -49,6 +52,12 @@ class InputSimulator:
             
             # 添加一个小延迟，让用户有时间切换到目标窗口
             time.sleep(0.3)
+            
+            # Windows 系统优先使用剪贴板粘贴方式
+            if self.system == "Windows":
+                if self._paste_via_clipboard_windows(text):
+                    return True
+                print("剪贴板粘贴失败，尝试其他方式")
             
             # 方法1: 使用 pynput
             if self.keyboard:
@@ -84,6 +93,103 @@ class InputSimulator:
             import traceback
             traceback.print_exc()
             return False
+    
+    def _paste_via_clipboard_windows(self, text: str) -> bool:
+        """
+        Windows 系统使用剪贴板粘贴方式输入文字
+        
+        Args:
+            text: 要输入的文字
+            
+        Returns:
+            bool: 是否输入成功
+        """
+        try:
+            # 保存当前剪贴板内容
+            try:
+                result = subprocess.run(
+                    ['powershell', '-Command', 'Get-Clipboard'],
+                    capture_output=True,
+                    text=True,
+                    timeout=5
+                )
+                if result.returncode == 0:
+                    self._original_clipboard = result.stdout
+            except Exception:
+                self._original_clipboard = None
+            
+            # 将文字复制到剪贴板
+            escaped_text = text.replace("'", "''")
+            set_clipboard_script = f"Set-Clipboard -Value '{escaped_text}'"
+            result = subprocess.run(
+                ['powershell', '-Command', set_clipboard_script],
+                capture_output=True,
+                text=True,
+                timeout=5
+            )
+            
+            if result.returncode != 0:
+                print(f"设置剪贴板失败: {result.stderr}")
+                return False
+            
+            # 等待剪贴板更新
+            time.sleep(0.1)
+            
+            # 模拟 Ctrl+V 粘贴
+            if self.keyboard:
+                try:
+                    from pynput.keyboard import Key
+                    self.keyboard.press(Key.ctrl)
+                    self.keyboard.press('v')
+                    time.sleep(0.05)
+                    self.keyboard.release('v')
+                    self.keyboard.release(Key.ctrl)
+                    print("使用剪贴板粘贴成功 (pynput)")
+                    return True
+                except Exception as e:
+                    print(f"pynput 粘贴失败: {e}")
+            
+            if self.pyautogui:
+                try:
+                    self.pyautogui.hotkey('ctrl', 'v')
+                    print("使用剪贴板粘贴成功 (pyautogui)")
+                    return True
+                except Exception as e:
+                    print(f"pyautogui 粘贴失败: {e}")
+            
+            # 使用 PowerShell SendKeys 作为最后的备选
+            script = 'Add-Type -AssemblyName System.Windows.Forms; [System.Windows.Forms.SendKeys]::SendWait("^v")'
+            result = subprocess.run(
+                ['powershell', '-Command', script],
+                capture_output=True,
+                text=True,
+                timeout=5
+            )
+            if result.returncode == 0:
+                print("使用剪贴板粘贴成功 (PowerShell)")
+                return True
+            else:
+                print(f"PowerShell 粘贴失败: {result.stderr}")
+                return False
+                
+        except Exception as e:
+            print(f"剪贴板粘贴失败: {e}")
+            return False
+        finally:
+            # 尝试恢复原始剪贴板内容（延迟恢复，避免影响粘贴操作）
+            if self._original_clipboard is not None:
+                try:
+                    time.sleep(0.2)
+                    escaped_original = self._original_clipboard.replace("'", "''")
+                    restore_script = f"Set-Clipboard -Value '{escaped_original}'"
+                    subprocess.run(
+                        ['powershell', '-Command', restore_script],
+                        capture_output=True,
+                        text=True,
+                        timeout=5
+                    )
+                except Exception:
+                    pass
     
     def _type_text_macos(self, text: str) -> bool:
         """使用 AppleScript 在 macOS 上输入文字"""
