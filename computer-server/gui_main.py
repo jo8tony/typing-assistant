@@ -83,6 +83,17 @@ class TrayApplication:
         return icon
     
     def _get_menu(self) -> pystray.Menu:
+        mode_menu_items = []
+        for mode_id, mode_name in INPUT_MODES:
+            mode_menu_items.append(
+                pystray.MenuItem(
+                    mode_name,
+                    self._create_mode_handler(mode_id),
+                    checked=lambda item, m=mode_id: self._is_current_mode(m),
+                    radio=True
+                )
+            )
+        
         return pystray.Menu(
             pystray.MenuItem(
                 lambda text: f"【{self.server_name or '打字助手'}】",
@@ -90,12 +101,9 @@ class TrayApplication:
                 default=True
             ),
             pystray.Menu.SEPARATOR,
-            pystray.Menu(
-                lambda: (
-                    pystray.MenuItem(mode_name, self._create_mode_handler(mode_id), checked=lambda item, m=mode_id: self._is_current_mode(m))
-                    for mode_id, mode_name in INPUT_MODES
-                ),
+            pystray.MenuItem(
                 lambda text: f"输入模式：{self.simulator.get_input_mode_display()}",
+                pystray.Menu(*mode_menu_items)
             ),
             pystray.Menu.SEPARATOR,
             pystray.MenuItem("日志", self._queue_show_log),
