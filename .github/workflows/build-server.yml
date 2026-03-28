@@ -37,14 +37,19 @@ jobs:
       working-directory: ./computer-server
       run: |
         pyinstaller typing_assistant.spec --clean
-      continue-on-error: true
+    
+    - name: Create installer with Inno Setup
+      working-directory: ./computer-server
+      run: |
+        iscc setup.iss
     
     - name: Upload Windows GUI build
-      if: success()
       uses: actions/upload-artifact@v4
       with:
         name: typing-assistant-windows-gui
-        path: computer-server/dist/
+        path: |
+          computer-server/dist/打字助手.exe
+          computer-server/dist/打字助手-Setup-*.exe
         retention-days: 30
 
   build-macos:
