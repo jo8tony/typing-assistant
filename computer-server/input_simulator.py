@@ -2,6 +2,11 @@ import time
 import platform
 import subprocess
 import sys
+import json
+import os
+
+INPUT_MODE_CLIPBOARD = "clipboard"
+INPUT_MODE_KEYBOARD = "keyboard"
 
 class InputSimulator:
     """键盘输入模拟器"""
@@ -9,6 +14,10 @@ class InputSimulator:
     def __init__(self):
         self.system = platform.system()
         self.keyboard = None
+        
+        # 输入模式: clipboard (剪贴板粘贴) 或 keyboard (模拟键盘)
+        self.input_mode = INPUT_MODE_CLIPBOARD
+        self._load_input_mode()
         
         # 尝试导入 pynput
         try:
@@ -33,6 +42,67 @@ class InputSimulator:
         # 保存原始剪贴板内容
         self._original_clipboard = None
     
+    def _get_config_path(self) -> str:
+        """获取配置文件路径"""
+        if self.system == "Windows":
+            config_dir = os.path.join(os.environ.get('APPDATA', ''), '.typing_assistant')
+        else:
+            config_dir = os.path.expanduser('~/.typing_assistant')
+        
+        os.makedirs(config_dir, exist_ok=True)
+        return os.path.join(config_dir, 'input_config.json')
+    
+    def _load_input_mode(self):
+        """加载输入模式配置"""
+        try:
+            config_path = self._get_config_path()
+            if os.path.exists(config_path):
+                with open(config_path, 'r', encoding='utf-8') as f:
+                    config = json.load(f)
+                    self.input_mode = config.get('input_mode', INPUT_MODE_CLIPBOARD)
+                    print(f"加载输入模式配置: {self.input_mode}")
+        except Exception as e:
+            print(f"加载输入模式配置失败: {e}")
+            self.input_mode = INPUT_MODE_CLIPBOARD
+    
+    def _save_input_mode(self):
+        """保存输入模式配置"""
+        try:
+            config_path = self._get_config_path()
+            with open(config_path, 'w', encoding='utf-8') as f:
+                json.dump({'input_mode': self.input_mode}, f)
+            print(f"保存输入模式配置: {self.input_mode}")
+        except Exception as e:
+            print(f"保存输入模式配置失败: {e}")
+    
+    def set_input_mode(self, mode: str):
+        """设置输入模式"""
+        if mode in [INPUT_MODE_CLIPBOARD, INPUT_MODE_KEYBOARD]:
+            self.input_mode = mode
+            self._save_input_mode()
+            print(f"输入模式已切换为: {self.get_input_mode_display()}")
+        else:
+            print(f"无效的输入模式: {mode}")
+    
+    def get_input_mode(self) -> str:
+        """获取当前输入模式"""
+        return self.input_mode
+    
+    def get_input_mode_display(self) -> str:
+        """获取输入模式显示名称"""
+        if self.input_mode == INPUT_MODE_CLIPBOARD:
+            return "剪贴板粘贴"
+        else:
+            return "模拟键盘"
+    
+    def toggle_input_mode(self) -> str:
+        """切换输入模式"""
+        if self.input_mode == INPUT_MODE_CLIPBOARD:
+            self.set_input_mode(INPUT_MODE_KEYBOARD)
+        else:
+            self.set_input_mode(INPUT_MODE_CLIPBOARD)
+        return self.input_mode
+    
     def type_text(self, text: str) -> bool:
         """
         模拟键盘输入文字
@@ -48,17 +118,28 @@ class InputSimulator:
                 print("输入文字为空，跳过")
                 return False
             
-            print(f"准备输入文字: {text[:30]}{'...' if len(text) > 30 else ''}")
+            print(f"准备输入文字 (模式: {self.get_input_mode_display()}): {text[:30]}{'...' if len(text) > 30 else ''}")
             
             # 添加一个小延迟，让用户有时间切换到目标窗口
             time.sleep(0.3)
             
-            # Windows 系统优先使用剪贴板粘贴方式
+            # Windows 系统：根据输入模式选择方式
             if self.system == "Windows":
-                if self._paste_via_clipboard_windows(text):
-                    return True
-                print("剪贴板粘贴失败，尝试其他方式")
+                if self.input_mode == INPUT_MODE_CLIPBOARD:
+                    if self._paste_via_clipboard_windows(text):
+                        return True
+                    print("剪贴板粘贴失败，尝试其他方式")
+                else:
+                    # 模拟键盘模式
+                    if self.keyboard:
+                        try:
+                            self.keyboard.type(text)
+                            print("使用模拟键盘输入成功 (pynput)")
+                            return True
+                        except Exception as e:
+                            print(f"pynput 输入失败: {e}，尝试备选方案")
             
+            # 非 Windows 系统或 Windows 备选方案
             # 方法1: 使用 pynput
             if self.keyboard:
                 try:
@@ -144,10 +225,10 @@ class InputSimulator:
                     time.sleep(0.05)
                     self.keyboard.release('v')
                     self.keyboard.release(Key.ctrl)
-                    print("使用剪贴板粘贴成功 (pynput)")
+                    print("剪贴板粘贴成功")
                     return True
                 except Exception as e:
-                    print(f"pynput 粘贴失败: {e}")
+                    print(f"剪贴板粘贴失败: {e}")
             
             if self.pyautogui:
                 try:

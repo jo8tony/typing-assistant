@@ -31,6 +31,7 @@ from websocket_server import get_server
 from discovery_service import get_discovery_service
 from log_manager import get_log_manager
 from names import get_random_name
+from input_simulator import get_simulator, INPUT_MODE_CLIPBOARD, INPUT_MODE_KEYBOARD
 
 
 class TrayApplication:
@@ -45,6 +46,7 @@ class TrayApplication:
         self.exit_dialog_open = False
         self.log_manager = get_log_manager()
         self.action_queue = queue.Queue()
+        self.simulator = get_simulator()
     
     def _setup_tk_root(self):
         self.root = tk.Tk()
@@ -58,7 +60,7 @@ class TrayApplication:
             else:
                 base_path = os.path.dirname(os.path.abspath(__file__))
             
-            icon_path = os.path.join(base_path, 'icon.png')
+            icon_path = os.path.join(base_path, 'app_icon.png')
             
             if os.path.exists(icon_path):
                 icon = Image.open(icon_path)
@@ -88,11 +90,24 @@ class TrayApplication:
                 default=True
             ),
             pystray.Menu.SEPARATOR,
+            pystray.MenuItem(
+                lambda text: f"输入模式: {self.simulator.get_input_mode_display()}",
+                self._toggle_input_mode,
+            ),
+            pystray.Menu.SEPARATOR,
             pystray.MenuItem("日志", self._queue_show_log),
             pystray.MenuItem("重命名", self._queue_show_rename),
             pystray.Menu.SEPARATOR,
             pystray.MenuItem("退出", self._queue_exit),
         )
+    
+    def _toggle_input_mode(self, icon=None, item=None):
+        self.simulator.toggle_input_mode()
+        self._update_menu()
+    
+    def _update_menu(self):
+        if self.icon:
+            self.icon.menu = self._get_menu()
     
     def _queue_show_log(self, icon=None, item=None):
         self.action_queue.put('show_log')

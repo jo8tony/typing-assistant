@@ -39,7 +39,7 @@ Name: "english"; MessagesFile: "compiler:Default.isl"
 
 [Files]
 Source: "dist\打字助手.exe"; DestDir: "{app}"; Flags: ignoreversion
-Source: "icon.png"; DestDir: "{app}"; Flags: ignoreversion
+Source: "app_icon.png"; DestDir: "{app}"; Flags: ignoreversion
 
 [Icons]
 Name: "{group}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"

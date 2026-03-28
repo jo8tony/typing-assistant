@@ -16,7 +16,7 @@ a = Analysis(
     pathex=[current_dir],
     binaries=[],
     datas=[
-        ('icon.png', '.'),
+        ('app_icon.png', '.'),
     ],
     hiddenimports=[
         'pystray._win32',
