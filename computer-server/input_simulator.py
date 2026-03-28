@@ -4,9 +4,28 @@ import subprocess
 import sys
 import json
 import os
+import ctypes
+from ctypes import wintypes
 
 INPUT_MODE_CLIPBOARD = "clipboard"
 INPUT_MODE_KEYBOARD = "keyboard"
+INPUT_MODE_SENDKEYS = "sendkeys"
+INPUT_MODE_SENDINPUT = "sendinput"
+INPUT_MODE_KEYBD_EVENT = "keybd_event"
+INPUT_MODE_CLIPBOARD_SENDKEYS = "clipboard_sendkeys"
+INPUT_MODE_CLIPBOARD_DELAYED = "clipboard_delayed"
+INPUT_MODE_UNICODE = "unicode"
+
+INPUT_MODES = [
+    (INPUT_MODE_CLIPBOARD, "剪贴板粘贴 (pynput/pyautogui)"),
+    (INPUT_MODE_KEYBOARD, "模拟键盘输入 (pynput)"),
+    (INPUT_MODE_SENDKEYS, "SendKeys (PowerShell)"),
+    (INPUT_MODE_SENDINPUT, "SendInput (Win32 API)"),
+    (INPUT_MODE_KEYBD_EVENT, "keybd_event (Win32 API)"),
+    (INPUT_MODE_CLIPBOARD_SENDKEYS, "剪贴板 + SendKeys"),
+    (INPUT_MODE_CLIPBOARD_DELAYED, "剪贴板粘贴 (延迟版)"),
+    (INPUT_MODE_UNICODE, "Unicode 字符输入"),
+]
 
 class InputSimulator:
     """键盘输入模拟器"""
@@ -93,7 +112,8 @@ class InputSimulator:
     
     def set_input_mode(self, mode: str):
         """设置输入模式"""
-        if mode in [INPUT_MODE_CLIPBOARD, INPUT_MODE_KEYBOARD]:
+        valid_modes = [m[0] for m in INPUT_MODES]
+        if mode in valid_modes:
             self.input_mode = mode
             self._save_input_mode()
             print(f"输入模式已切换为: {self.get_input_mode_display()}")
@@ -106,18 +126,14 @@ class InputSimulator:
     
     def get_input_mode_display(self) -> str:
         """获取输入模式显示名称"""
-        if self.input_mode == INPUT_MODE_CLIPBOARD:
-            return "剪贴板粘贴"
-        else:
-            return "模拟键盘"
+        for mode_id, mode_name in INPUT_MODES:
+            if mode_id == self.input_mode:
+                return mode_name
+        return "未知模式"
     
-    def toggle_input_mode(self) -> str:
-        """切换输入模式"""
-        if self.input_mode == INPUT_MODE_CLIPBOARD:
-            self.set_input_mode(INPUT_MODE_KEYBOARD)
-        else:
-            self.set_input_mode(INPUT_MODE_CLIPBOARD)
-        return self.input_mode
+    def get_all_modes(self):
+        """获取所有可用的输入模式"""
+        return INPUT_MODES
     
     def type_text(self, text: str) -> bool:
         """
@@ -136,36 +152,19 @@ class InputSimulator:
             
             print(f"准备输入文字 (模式: {self.get_input_mode_display()}): {text[:30]}{'...' if len(text) > 30 else ''}")
             
-            # 添加一个小延迟，让用户有时间切换到目标窗口
             time.sleep(0.3)
             
-            # Windows 系统：根据输入模式选择方式
             if self.system == "Windows":
-                if self.input_mode == INPUT_MODE_CLIPBOARD:
-                    if self._paste_via_clipboard_windows(text):
-                        return True
-                    print("剪贴板粘贴失败，尝试其他方式")
-                else:
-                    # 模拟键盘模式
-                    if self.keyboard:
-                        try:
-                            self.keyboard.type(text)
-                            print("使用模拟键盘输入成功 (pynput)")
-                            return True
-                        except Exception as e:
-                            print(f"pynput 输入失败: {e}，尝试备选方案")
+                return self._type_text_windows_mode(text)
             
-            # 非 Windows 系统或 Windows 备选方案
-            # 方法1: 使用 pynput
             if self.keyboard:
                 try:
                     self.keyboard.type(text)
                     print("使用 pynput 输入成功")
                     return True
                 except Exception as e:
-                    print(f"pynput 输入失败: {e}，尝试备选方案")
+                    print(f"pynput 输入失败: {e}")
             
-            # 方法2: 使用 pyautogui
             if self.pyautogui:
                 try:
                     self.pyautogui.typewrite(text, interval=0.01)
@@ -174,13 +173,10 @@ class InputSimulator:
                 except Exception as e:
                     print(f"pyautogui 输入失败: {e}")
             
-            # 方法3: 使用系统命令 (macOS 使用 osascript)
-            if self.system == "Darwin":  # macOS
+            if self.system == "Darwin":
                 return self._type_text_macos(text)
             elif self.system == "Linux":
                 return self._type_text_linux(text)
-            elif self.system == "Windows":
-                return self._type_text_windows(text)
             
             print("没有可用的输入方法")
             return False
@@ -189,6 +185,250 @@ class InputSimulator:
             print(f"输入文字失败: {e}")
             import traceback
             traceback.print_exc()
+            return False
+    
+    def _type_text_windows_mode(self, text: str) -> bool:
+        """Windows 系统根据模式选择输入方式"""
+        mode = self.input_mode
+        
+        if mode == INPUT_MODE_CLIPBOARD:
+            return self._paste_via_clipboard_windows(text)
+        
+        elif mode == INPUT_MODE_KEYBOARD:
+            if self.keyboard:
+                try:
+                    self.keyboard.type(text)
+                    print("使用模拟键盘输入成功 (pynput)")
+                    return True
+                except Exception as e:
+                    print(f"pynput 输入失败: {e}")
+            return False
+        
+        elif mode == INPUT_MODE_SENDKEYS:
+            return self._type_via_sendkeys(text)
+        
+        elif mode == INPUT_MODE_SENDINPUT:
+            return self._type_via_sendinput(text)
+        
+        elif mode == INPUT_MODE_KEYBD_EVENT:
+            return self._type_via_keybd_event(text)
+        
+        elif mode == INPUT_MODE_CLIPBOARD_SENDKEYS:
+            return self._paste_via_sendkeys(text)
+        
+        elif mode == INPUT_MODE_CLIPBOARD_DELAYED:
+            return self._paste_via_clipboard_delayed(text)
+        
+        elif mode == INPUT_MODE_UNICODE:
+            return self._type_via_unicode(text)
+        
+        else:
+            print(f"未知输入模式: {mode}")
+            return False
+    
+    def _type_via_sendkeys(self, text: str) -> bool:
+        """使用 PowerShell SendKeys 输入文字"""
+        try:
+            escaped_text = text.replace('"', '`"').replace('{', '{{}').replace('}', '{}}')
+            script = f'Add-Type -AssemblyName System.Windows.Forms; [System.Windows.Forms.SendKeys]::SendWait("{escaped_text}")'
+            result = subprocess.run(
+                ['powershell', '-Command', script],
+                capture_output=True,
+                text=True,
+                timeout=10,
+                startupinfo=self._startupinfo,
+                creationflags=subprocess.CREATE_NO_WINDOW if self.system == "Windows" else 0
+            )
+            if result.returncode == 0:
+                print("使用 SendKeys 输入成功")
+                return True
+            else:
+                print(f"SendKeys 错误: {result.stderr}")
+                return False
+        except Exception as e:
+            print(f"SendKeys 输入失败: {e}")
+            return False
+    
+    def _type_via_sendinput(self, text: str) -> bool:
+        """使用 Win32 SendInput API 输入文字"""
+        try:
+            user32 = ctypes.windll.user32
+            
+            KEYEVENTF_UNICODE = 0x0004
+            KEYEVENTF_KEYUP = 0x0002
+            
+            INPUT_KEYBOARD = 1
+            
+            class KEYBDINPUT(ctypes.Structure):
+                _fields_ = [
+                    ("wVk", wintypes.WORD),
+                    ("wScan", wintypes.WORD),
+                    ("dwFlags", wintypes.DWORD),
+                    ("time", wintypes.DWORD),
+                    ("dwExtraInfo", ctypes.POINTER(ctypes.c_ulong)),
+                ]
+            
+            class INPUT(ctypes.Structure):
+                _fields_ = [
+                    ("type", wintypes.DWORD),
+                    ("ki", KEYBDINPUT),
+                    ("padding", ctypes.c_ubyte * 8),
+                ]
+            
+            for char in text:
+                char_code = ord(char)
+                
+                inp = INPUT()
+                inp.type = INPUT_KEYBOARD
+                inp.ki.wVk = 0
+                inp.ki.wScan = char_code
+                inp.ki.dwFlags = KEYEVENTF_UNICODE
+                inp.ki.time = 0
+                inp.ki.dwExtraInfo = None
+                
+                user32.SendInput(1, ctypes.byref(inp), ctypes.sizeof(inp))
+                
+                inp.ki.dwFlags = KEYEVENTF_UNICODE | KEYEVENTF_KEYUP
+                user32.SendInput(1, ctypes.byref(inp), ctypes.sizeof(inp))
+                
+                time.sleep(0.001)
+            
+            print("使用 SendInput 输入成功")
+            return True
+        except Exception as e:
+            print(f"SendInput 输入失败: {e}")
+            return False
+    
+    def _type_via_keybd_event(self, text: str) -> bool:
+        """使用 Win32 keybd_event API 输入文字"""
+        try:
+            user32 = ctypes.windll.user32
+            
+            KEYEVENTF_UNICODE = 0x0004
+            KEYEVENTF_KEYUP = 0x0002
+            
+            for char in text:
+                char_code = ord(char)
+                
+                user32.keybd_event(0, char_code, KEYEVENTF_UNICODE, 0)
+                user32.keybd_event(0, char_code, KEYEVENTF_UNICODE | KEYEVENTF_KEYUP, 0)
+                
+                time.sleep(0.001)
+            
+            print("使用 keybd_event 输入成功")
+            return True
+        except Exception as e:
+            print(f"keybd_event 输入失败: {e}")
+            return False
+    
+    def _paste_via_sendkeys(self, text: str) -> bool:
+        """剪贴板 + SendKeys 粘贴"""
+        try:
+            if self.pyperclip:
+                self.pyperclip.copy(text)
+            else:
+                escaped_text = text.replace("'", "''")
+                set_clipboard_script = f"Set-Clipboard -Value '{escaped_text}'"
+                subprocess.run(
+                    ['powershell', '-Command', set_clipboard_script],
+                    capture_output=True,
+                    text=True,
+                    timeout=5,
+                    startupinfo=self._startupinfo,
+                    creationflags=subprocess.CREATE_NO_WINDOW if self.system == "Windows" else 0
+                )
+            
+            time.sleep(0.1)
+            
+            script = 'Add-Type -AssemblyName System.Windows.Forms; [System.Windows.Forms.SendKeys]::SendWait("^v")'
+            result = subprocess.run(
+                ['powershell', '-Command', script],
+                capture_output=True,
+                text=True,
+                timeout=10,
+                startupinfo=self._startupinfo,
+                creationflags=subprocess.CREATE_NO_WINDOW if self.system == "Windows" else 0
+            )
+            
+            if result.returncode == 0:
+                print("使用剪贴板 + SendKeys 粘贴成功")
+                return True
+            else:
+                print(f"SendKeys 粘贴错误: {result.stderr}")
+                return False
+        except Exception as e:
+            print(f"剪贴板 + SendKeys 粘贴失败: {e}")
+            return False
+    
+    def _paste_via_clipboard_delayed(self, text: str) -> bool:
+        """剪贴板粘贴 (延迟版，适用于某些特殊控件)"""
+        try:
+            if self.pyperclip:
+                self.pyperclip.copy(text)
+            else:
+                escaped_text = text.replace("'", "''")
+                set_clipboard_script = f"Set-Clipboard -Value '{escaped_text}'"
+                subprocess.run(
+                    ['powershell', '-Command', set_clipboard_script],
+                    capture_output=True,
+                    text=True,
+                    timeout=5,
+                    startupinfo=self._startupinfo,
+                    creationflags=subprocess.CREATE_NO_WINDOW if self.system == "Windows" else 0
+                )
+            
+            time.sleep(0.3)
+            
+            if self.keyboard:
+                from pynput.keyboard import Key
+                self.keyboard.press(Key.ctrl)
+                time.sleep(0.05)
+                self.keyboard.press('v')
+                time.sleep(0.1)
+                self.keyboard.release('v')
+                time.sleep(0.05)
+                self.keyboard.release(Key.ctrl)
+                print("使用延迟剪贴板粘贴成功")
+                return True
+            
+            if self.pyautogui:
+                time.sleep(0.1)
+                self.pyautogui.hotkey('ctrl', 'v')
+                print("使用延迟剪贴板粘贴成功 (pyautogui)")
+                return True
+            
+            return False
+        except Exception as e:
+            print(f"延迟剪贴板粘贴失败: {e}")
+            return False
+    
+    def _type_via_unicode(self, text: str) -> bool:
+        """使用 Unicode 字符输入 (Alt+Numpad 方式)"""
+        try:
+            user32 = ctypes.windll.user32
+            
+            VK_MENU = 0x12
+            KEYEVENTF_KEYUP = 0x0002
+            
+            for char in text:
+                char_code = ord(char)
+                
+                user32.keybd_event(VK_MENU, 0, 0, 0)
+                
+                num_str = str(char_code)
+                for digit in num_str:
+                    vk_code = 0x60 + int(digit)
+                    user32.keybd_event(vk_code, 0, 0, 0)
+                    user32.keybd_event(vk_code, 0, KEYEVENTF_KEYUP, 0)
+                    time.sleep(0.01)
+                
+                user32.keybd_event(VK_MENU, 0, KEYEVENTF_KEYUP, 0)
+                time.sleep(0.02)
+            
+            print("使用 Unicode 输入成功")
+            return True
+        except Exception as e:
+            print(f"Unicode 输入失败: {e}")
             return False
     
     def _paste_via_clipboard_windows(self, text: str) -> bool:
@@ -317,28 +557,6 @@ class InputSimulator:
             return False
         except Exception as e:
             print(f"Linux 输入失败: {e}")
-            return False
-    
-    def _type_text_windows(self, text: str) -> bool:
-        """使用 PowerShell 在 Windows 上输入文字"""
-        try:
-            # 使用 PowerShell 的 SendKeys
-            escaped_text = text.replace('"', '`"').replace('{', '{{}').replace('}', '{}}')
-            script = f'Add-Type -AssemblyName System.Windows.Forms; [System.Windows.Forms.SendKeys]::SendWait("{escaped_text}")'
-            result = subprocess.run(
-                ['powershell', '-Command', script],
-                capture_output=True,
-                text=True,
-                timeout=10
-            )
-            if result.returncode == 0:
-                print("使用 PowerShell SendKeys 输入成功")
-                return True
-            else:
-                print(f"PowerShell 错误: {result.stderr}")
-                return False
-        except Exception as e:
-            print(f"Windows 输入失败: {e}")
             return False
     
     def press_key(self, key_name: str) -> bool:

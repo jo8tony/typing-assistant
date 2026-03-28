@@ -31,7 +31,7 @@ from websocket_server import get_server
 from discovery_service import get_discovery_service
 from log_manager import get_log_manager
 from names import get_random_name
-from input_simulator import get_simulator, INPUT_MODE_CLIPBOARD, INPUT_MODE_KEYBOARD
+from input_simulator import get_simulator, INPUT_MODES
 
 
 class TrayApplication:
@@ -43,6 +43,7 @@ class TrayApplication:
         self.log_window = None
         self.log_text = None
         self.rename_dialog = None
+        self.mode_dialog = None
         self.exit_dialog_open = False
         self.log_manager = get_log_manager()
         self.action_queue = queue.Queue()
@@ -92,7 +93,7 @@ class TrayApplication:
             pystray.Menu.SEPARATOR,
             pystray.MenuItem(
                 lambda text: f"输入模式: {self.simulator.get_input_mode_display()}",
-                self._toggle_input_mode,
+                self._show_mode_dialog,
             ),
             pystray.Menu.SEPARATOR,
             pystray.MenuItem("日志", self._queue_show_log),
@@ -101,9 +102,8 @@ class TrayApplication:
             pystray.MenuItem("退出", self._queue_exit),
         )
     
-    def _toggle_input_mode(self, icon=None, item=None):
-        self.simulator.toggle_input_mode()
-        self._update_menu()
+    def _show_mode_dialog(self, icon=None, item=None):
+        self.action_queue.put('show_mode')
     
     def _update_menu(self):
         if self.icon:
@@ -127,6 +127,8 @@ class TrayApplication:
                         self._show_log_window()
                     elif action == 'show_rename':
                         self._show_rename_dialog()
+                    elif action == 'show_mode':
+                        self._show_mode_selection_dialog()
                     elif action == 'exit':
                         self._do_exit()
                 except queue.Empty:
@@ -321,6 +323,105 @@ class TrayApplication:
             discovery.device_info['alias'] = new_name
         
         print(f"服务名称已更新为: {new_name}")
+    
+    def _show_mode_selection_dialog(self):
+        if self.mode_dialog is not None:
+            try:
+                if self.mode_dialog.winfo_exists():
+                    self.mode_dialog.lift()
+                    self.mode_dialog.focus_force()
+                    return
+            except tk.TclError:
+                self.mode_dialog = None
+        
+        self.mode_dialog = tk.Toplevel(self.root)
+        self.mode_dialog.title("选择输入模式")
+        self.mode_dialog.geometry("450x400")
+        self.mode_dialog.resizable(False, False)
+        
+        self.mode_dialog.update_idletasks()
+        screen_width = self.mode_dialog.winfo_screenwidth()
+        screen_height = self.mode_dialog.winfo_screenheight()
+        x = (screen_width - 450) // 2
+        y = (screen_height - 400) // 2
+        self.mode_dialog.geometry(f"450x400+{x}+{y}")
+        
+        main_frame = ttk.Frame(self.mode_dialog, padding="20")
+        main_frame.pack(fill=tk.BOTH, expand=True)
+        
+        ttk.Label(main_frame, text="请选择输入模式:", font=('Microsoft YaHei UI', 11, 'bold')).pack(anchor=tk.W, pady=(0, 10))
+        
+        current_mode = self.simulator.get_input_mode()
+        mode_var = tk.StringVar(value=current_mode)
+        
+        list_frame = ttk.Frame(main_frame)
+        list_frame.pack(fill=tk.BOTH, expand=True, pady=5)
+        
+        style = ttk.Style()
+        style.configure('Mode.TRadiobutton', font=('Microsoft YaHei UI', 10), padding=5)
+        
+        for mode_id, mode_name in INPUT_MODES:
+            rb = ttk.Radiobutton(
+                list_frame,
+                text=mode_name,
+                value=mode_id,
+                variable=mode_var,
+                style='Mode.TRadiobutton'
+            )
+            rb.pack(anchor=tk.W, pady=2)
+            
+            if mode_id == current_mode:
+                rb.focus_set()
+        
+        desc_frame = ttk.LabelFrame(main_frame, text="模式说明", padding="10")
+        desc_frame.pack(fill=tk.X, pady=10)
+        
+        desc_text = {
+            "clipboard": "标准剪贴板粘贴，适用于大多数应用",
+            "keyboard": "模拟键盘逐字输入，兼容性好但速度较慢",
+            "sendkeys": "使用 PowerShell SendKeys，适用于某些特殊控件",
+            "sendinput": "使用 Win32 SendInput API，底层输入方式",
+            "keybd_event": "使用 Win32 keybd_event，更底层的输入方式",
+            "clipboard_sendkeys": "剪贴板配合 SendKeys 粘贴，组合方式",
+            "clipboard_delayed": "延迟版剪贴板粘贴，适用于响应较慢的控件",
+            "unicode": "Unicode 字符输入，使用 Alt+数字键方式",
+        }
+        
+        desc_label = ttk.Label(desc_frame, text=desc_text.get(current_mode, ""), font=('Microsoft YaHei UI', 9), wraplength=380)
+        desc_label.pack(fill=tk.X)
+        
+        def update_desc(*args):
+            selected = mode_var.get()
+            desc_label.configure(text=desc_text.get(selected, ""))
+        
+        mode_var.trace('w', update_desc)
+        
+        button_frame = ttk.Frame(main_frame)
+        button_frame.pack(fill=tk.X, pady=(10, 0))
+        
+        def on_confirm():
+            selected_mode = mode_var.get()
+            self.simulator.set_input_mode(selected_mode)
+            self._update_menu()
+            try:
+                self.mode_dialog.destroy()
+            except Exception:
+                pass
+            self.mode_dialog = None
+        
+        def on_cancel():
+            try:
+                self.mode_dialog.destroy()
+            except Exception:
+                pass
+            self.mode_dialog = None
+        
+        ttk.Button(button_frame, text="确定", command=on_confirm, width=10).pack(side=tk.RIGHT, padx=5)
+        ttk.Button(button_frame, text="取消", command=on_cancel, width=10).pack(side=tk.RIGHT, padx=5)
+        
+        self.mode_dialog.protocol("WM_DELETE_WINDOW", on_cancel)
+        self.mode_dialog.grab_set()
+        self.mode_dialog.focus_force()
     
     def _do_exit(self):
         if self.exit_dialog_open:
