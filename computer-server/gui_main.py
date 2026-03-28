@@ -83,9 +83,9 @@ class TrayApplication:
     def _get_menu(self) -> pystray.Menu:
         return pystray.Menu(
             pystray.MenuItem(
-                lambda text: self.server_name or "打字助手",
+                lambda text: f"【{self.server_name or '打字助手'}】",
                 lambda: None,
-                enabled=False
+                default=True
             ),
             pystray.Menu.SEPARATOR,
             pystray.MenuItem("日志", self._queue_show_log),
