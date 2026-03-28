@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-跨设备打字助手 - Windows GUI版本
+跨设备打字助手 - Windows GUI 版本
 系统托盘应用程序
 """
 
@@ -69,10 +69,10 @@ class TrayApplication:
                 icon = icon.resize((64, 64), Image.Resampling.LANCZOS)
                 return icon
             else:
-                print(f"图标文件不存在: {icon_path}")
+                print(f"图标文件不存在：{icon_path}")
                 return self._create_default_icon()
         except Exception as e:
-            print(f"加载图标失败: {e}")
+            print(f"加载图标失败：{e}")
             return self._create_default_icon()
     
     def _create_default_icon(self) -> Image.Image:
@@ -104,23 +104,23 @@ class TrayApplication:
     
     def _get_mode_display_text(self):
         try:
-            return f"输入模式: {self.simulator.get_input_mode_display()}"
+            return f"输入模式：{self.simulator.get_input_mode_display()}"
         except Exception as e:
-            print(f"获取输入模式显示文本失败: {e}")
-            return "输入模式: 剪贴板粘贴 (pynput/pyautogui)"
+            print(f"获取输入模式显示文本失败：{e}")
+            return "输入模式：剪贴板粘贴 (pynput/pyautogui)"
     
     def _show_mode_dialog(self, icon=None, item=None):
         self.action_queue.put('show_mode')
     
-    def _update_menu(self):
+    def _refresh_tray_menu(self):
+        """刷新托盘菜单"""
         if self.icon:
             try:
-                print(f"[DEBUG] 更新菜单，当前模式: {self.simulator.get_input_mode_display()}")
-                self.icon.menu = self._get_menu()
+                print(f"[DEBUG] 刷新托盘菜单，当前模式：{self.simulator.get_input_mode_display()}")
                 self.icon.update_menu()
-                print(f"[DEBUG] 菜单更新完成")
+                print(f"[DEBUG] 托盘菜单刷新完成")
             except Exception as e:
-                print(f"[ERROR] 更新菜单失败: {e}")
+                print(f"[ERROR] 刷新托盘菜单失败：{e}")
     
     def _queue_show_log(self, icon=None, item=None):
         self.action_queue.put('show_log')
@@ -147,7 +147,7 @@ class TrayApplication:
                 except queue.Empty:
                     break
         except Exception as e:
-            print(f"处理动作错误: {e}")
+            print(f"处理动作错误：{e}")
         
         if self.running:
             self.root.after(50, self._process_actions)
@@ -335,7 +335,7 @@ class TrayApplication:
         if discovery and discovery.is_running:
             discovery.device_info['alias'] = new_name
         
-        print(f"服务名称已更新为: {new_name}")
+        print(f"服务名称已更新为：{new_name}")
     
     def _show_mode_selection_dialog(self):
         if self.mode_dialog is not None:
@@ -414,12 +414,19 @@ class TrayApplication:
         
         def on_confirm():
             selected_mode = mode_var.get()
-            print(f"[DEBUG] 选择的模式: {selected_mode}")
-            self.simulator.set_input_mode(selected_mode)
-            new_mode = self.simulator.get_input_mode_display()
-            print(f"[DEBUG] 当前模式: {new_mode}")
-            self._update_menu()
-            messagebox.showinfo("模式切换", f"输入模式已切换为: {new_mode}", parent=self.root)
+            print(f"[DEBUG] 选择的模式：{selected_mode}")
+            
+            if selected_mode != current_mode:
+                self.simulator.set_input_mode(selected_mode)
+                new_mode = self.simulator.get_input_mode_display()
+                print(f"[DEBUG] 模式已切换：{current_mode} -> {new_mode}")
+                
+                self.root.after(100, self._refresh_tray_menu)
+                
+                messagebox.showinfo("模式切换", f"输入模式已切换为：{new_mode}", parent=self.mode_dialog)
+            else:
+                print(f"[DEBUG] 模式未变化：{selected_mode}")
+            
             try:
                 self.mode_dialog.destroy()
             except Exception:
@@ -489,7 +496,7 @@ class TrayApplication:
             try:
                 await server.start()
             except Exception as e:
-                print(f"服务器错误: {e}")
+                print(f"服务器错误：{e}")
             finally:
                 server.stop()
                 discovery.stop()
@@ -504,13 +511,11 @@ class TrayApplication:
         
         icon_image = self._load_icon()
         
-        menu = self._get_menu()
-        print(f"[DEBUG] 菜单已创建: {menu}")
         self.icon = pystray.Icon(
             'typing_assistant',
             icon_image,
             '打字助手 - 运行中',
-            menu
+            self._get_menu()
         )
         
         def update_tooltip():
@@ -543,7 +548,7 @@ class TrayApplication:
         try:
             self.root.mainloop()
         except Exception as e:
-            print(f"Tkinter错误: {e}")
+            print(f"Tkinter 错误：{e}")
         finally:
             self.running = False
             self.log_manager.restore_print()
@@ -551,7 +556,7 @@ class TrayApplication:
 
 def main():
     if platform.system() != 'Windows':
-        print("此GUI版本仅支持Windows系统")
+        print("此 GUI 版本仅支持 Windows 系统")
         print("请使用 python main.py 运行命令行版本")
         sys.exit(1)
     
