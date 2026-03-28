@@ -15,6 +15,7 @@ import '../models/connection_model.dart';
 import '../widgets/device_discovery_sheet.dart';
 import '../utils/constants.dart';
 import 'ocr_screen.dart';
+import 'qr_scanner_screen.dart';
 
 typedef DiscoveredComputer = DiscoveredDevice;
 
@@ -490,6 +491,21 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
+        leading: IconButton(
+          icon: const Icon(Icons.qr_code_scanner),
+          onPressed: () async {
+            final result = await Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (context) => const QrScannerScreen(),
+              ),
+            );
+            if (result == true && mounted) {
+              _hasAutoConnected = true;
+            }
+          },
+          tooltip: '扫码连接',
+        ),
         title: Row(
           mainAxisSize: MainAxisSize.min,
           children: [

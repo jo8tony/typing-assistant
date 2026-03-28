@@ -11,6 +11,7 @@ import asyncio
 import threading
 import platform
 import queue
+import socket
 
 if platform.system() == 'Windows':
     import ctypes
@@ -23,6 +24,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 import pystray
 from PIL import Image
+import qrcode
 import tkinter as tk
 from tkinter import ttk, messagebox
 
@@ -44,6 +46,7 @@ class TrayApplication:
         self.log_text = None
         self.rename_dialog = None
         self.exit_dialog_open = False
+        self.qrcode_window = None
         self.log_manager = get_log_manager()
         self.action_queue = queue.Queue()
         self.simulator = get_simulator()
@@ -108,6 +111,7 @@ class TrayApplication:
             pystray.Menu.SEPARATOR,
             pystray.MenuItem("日志", self._queue_show_log),
             pystray.MenuItem("重命名", self._queue_show_rename),
+            pystray.MenuItem("生成二维码", self._queue_show_qrcode),
             pystray.Menu.SEPARATOR,
             pystray.MenuItem("退出", self._queue_exit),
         )
@@ -140,6 +144,9 @@ class TrayApplication:
     def _queue_show_rename(self, icon=None, item=None):
         self.action_queue.put('show_rename')
     
+    def _queue_show_qrcode(self, icon=None, item=None):
+        self.action_queue.put('show_qrcode')
+    
     def _queue_exit(self, icon=None, item=None):
         self.action_queue.put('exit')
     
@@ -152,6 +159,8 @@ class TrayApplication:
                         self._show_log_window()
                     elif action == 'show_rename':
                         self._show_rename_dialog()
+                    elif action == 'show_qrcode':
+                        self._show_qrcode_window()
                     elif action == 'exit':
                         self._do_exit()
                 except queue.Empty:
@@ -346,6 +355,136 @@ class TrayApplication:
             discovery.device_info['alias'] = new_name
         
         print(f"服务名称已更新为：{new_name}")
+    
+    def _get_local_ip(self) -> str:
+        try:
+            s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            s.connect(("8.8.8.8", 80))
+            ip = s.getsockname()[0]
+            s.close()
+            return ip
+        except Exception:
+            return "127.0.0.1"
+    
+    def _show_qrcode_window(self):
+        if self.qrcode_window is not None:
+            try:
+                if self.qrcode_window.winfo_exists():
+                    self.qrcode_window.lift()
+                    self.qrcode_window.focus_force()
+                    return
+            except tk.TclError:
+                self.qrcode_window = None
+        
+        self.qrcode_window = tk.Toplevel(self.root)
+        self.qrcode_window.title("扫码连接")
+        self.qrcode_window.geometry("400x500")
+        self.qrcode_window.resizable(False, False)
+        
+        self.qrcode_window.update_idletasks()
+        screen_width = self.qrcode_window.winfo_screenwidth()
+        screen_height = self.qrcode_window.winfo_screenheight()
+        x = (screen_width - 400) // 2
+        y = (screen_height - 500) // 2
+        self.qrcode_window.geometry(f"400x500+{x}+{y}")
+        
+        main_frame = ttk.Frame(self.qrcode_window, padding="20")
+        main_frame.pack(fill=tk.BOTH, expand=True)
+        
+        local_ip = self._get_local_ip()
+        port = Config.WEBSOCKET_PORT
+        server_name = self.server_name or "打字助手"
+        ws_url = f"ws://{local_ip}:{port}"
+        
+        ttk.Label(
+            main_frame, 
+            text=f"「{server_name}」", 
+            font=('Microsoft YaHei UI', 14, 'bold')
+        ).pack(pady=(0, 5))
+        
+        ttk.Label(
+            main_frame, 
+            text="使用手机端扫描下方二维码连接", 
+            font=('Microsoft YaHei UI', 10)
+        ).pack(pady=(0, 15))
+        
+        try:
+            qr = qrcode.QRCode(
+                version=1,
+                error_correction=qrcode.constants.ERROR_CORRECT_L,
+                box_size=10,
+                border=2,
+            )
+            qr.add_data(ws_url)
+            qr.make(fit=True)
+            
+            qr_img = qr.make_image(fill_color="black", back_color="white")
+            qr_img = qr_img.resize((280, 280), Image.Resampling.LANCZOS)
+            
+            if getattr(sys, 'frozen', False):
+                temp_dir = sys._MEIPASS
+            else:
+                temp_dir = os.path.dirname(os.path.abspath(__file__))
+            
+            temp_qr_path = os.path.join(temp_dir, 'temp_qr.png')
+            qr_img.save(temp_qr_path)
+            
+            from PIL import ImageTk
+            qr_photo = ImageTk.PhotoImage(file=temp_qr_path)
+            
+            qr_label = ttk.Label(main_frame, image=qr_photo)
+            qr_label.image = qr_photo
+            qr_label.pack(pady=10)
+            
+            try:
+                os.remove(temp_qr_path)
+            except Exception:
+                pass
+            
+        except Exception as e:
+            ttk.Label(
+                main_frame, 
+                text=f"生成二维码失败：{e}", 
+                foreground='red'
+            ).pack(pady=20)
+        
+        info_frame = ttk.Frame(main_frame)
+        info_frame.pack(fill=tk.X, pady=10)
+        
+        ttk.Label(
+            info_frame, 
+            text="连接信息：", 
+            font=('Microsoft YaHei UI', 10, 'bold')
+        ).pack(anchor=tk.W)
+        
+        ttk.Label(
+            info_frame, 
+            text=f"IP地址：{local_ip}", 
+            font=('Microsoft YaHei UI', 10)
+        ).pack(anchor=tk.W, pady=2)
+        
+        ttk.Label(
+            info_frame, 
+            text=f"端口：{port}", 
+            font=('Microsoft YaHei UI', 10)
+        ).pack(anchor=tk.W, pady=2)
+        
+        ttk.Label(
+            info_frame, 
+            text=f"连接地址：{ws_url}", 
+            font=('Microsoft YaHei UI', 9),
+            foreground='gray'
+        ).pack(anchor=tk.W, pady=5)
+        
+        def on_close():
+            try:
+                self.qrcode_window.destroy()
+            except Exception:
+                pass
+            self.qrcode_window = None
+        
+        self.qrcode_window.protocol("WM_DELETE_WINDOW", on_close)
+        self.qrcode_window.focus_force()
     
     def _do_exit(self):
         if self.exit_dialog_open:
